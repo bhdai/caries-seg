@@ -8,8 +8,7 @@ wheels/
 
 # Virtual environments
 .venv
-data/DC1000_dataset*
-data/tufts_dental
+data/
 references/
 docs/todo.md
-
+tmp/
