@@ -12,3 +12,5 @@ data/
 references/
 docs/todo.md
 tmp/
+.env
+files/

@@ -20,6 +20,13 @@ import cv2
 import albumentations as A
 import torch
 from torch.utils.data import DataLoader
+from dotenv import load_dotenv
+
+# Load .env if present so WANDB_API_KEY is available before wandb is imported.
+# We intentionally do not fail when .env is absent — it is optional.
+load_dotenv(dotenv_path=".env", override=False)
+
+import wandb  # noqa: E402  (must come after load_dotenv)
 
 from src.utils import seeding, create_dir, shuffling, epoch_time, print_and_save
 from src.metrics import calculate_metrics
@@ -131,6 +138,11 @@ def main():
     parser.add_argument("--model", type=str, default="UNet", choices=list(MODEL_REGISTRY.keys()))
     parser.add_argument("--data_path", type=str, default="data/DC1000")
     parser.add_argument("--resume", action="store_true", help="Resume training from checkpoint if it exists")
+    parser.add_argument("--wandb", action="store_true", help="Enable Weights & Biases logging")
+    parser.add_argument("--wandb-project", type=str, default=os.getenv("WANDB_PROJECT", "carries-seg"),
+                        help="wandb project name (default: carries-seg or $WANDB_PROJECT)")
+    parser.add_argument("--wandb-run-name", type=str, default=None,
+                        help="Optional friendly name for this wandb run")
     opt = parser.parse_args()
 
     # ----- directories -----
@@ -158,6 +170,26 @@ def main():
         f"Epochs: {num_epochs}\nEarly Stopping Patience: {early_stopping_patience}\n"
     )
     print_and_save(train_log_path, data_str)
+
+    # ----- wandb initialisation -----
+    #
+    # We keep wandb entirely optional: pass --wandb to activate. When disabled
+    # every wandb call below is a no-op via the disabled mode, so the rest of
+    # the training loop never needs an `if opt.wandb` guard.
+    wandb.init(
+        mode="online" if opt.wandb else "disabled",
+        project=opt.wandb_project,
+        name=opt.wandb_run_name,
+        config={
+            "model": opt.model,
+            "image_size": image_size,
+            "batch_size": batch_size,
+            "lr": lr,
+            "num_epochs": num_epochs,
+            "early_stopping_patience": early_stopping_patience,
+            "data_path": opt.data_path,
+        },
+    )
 
     # ----- dataset -----
     (train_x, train_y), (valid_x, valid_y), (test_x, test_y) = load_DC1000_data(opt.data_path)
@@ -247,6 +279,23 @@ def main():
         )
         print_and_save(train_log_path, data_str)
 
+        # Log scalar metrics to wandb. When wandb is disabled this is a no-op.
+        wandb.log({
+            "epoch": epoch + 1,
+            "train/loss": train_loss,
+            "train/jaccard": train_metrics[0],
+            "train/f1": train_metrics[1],
+            "train/recall": train_metrics[2],
+            "train/precision": train_metrics[3],
+            "val/loss": valid_loss,
+            "val/jaccard": valid_metrics[0],
+            "val/f1": valid_metrics[1],
+            "val/recall": valid_metrics[2],
+            "val/precision": valid_metrics[3],
+            "val/best_f1": best_valid_f1,
+            "lr": optimizer.param_groups[0]["lr"],
+        })
+
         if early_stopping_count == early_stopping_patience:
             data_str = (
                 f"Early stopping: validation F1 stopped improving "
@@ -254,6 +303,8 @@ def main():
             )
             print_and_save(train_log_path, data_str)
             break
+
+    wandb.finish()
 
 
 if __name__ == "__main__":
