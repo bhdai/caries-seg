@@ -2,37 +2,34 @@
 Training Script — DC1000 Dental Caries Segmentation
 =====================================================
 
-Follows the reference repo's training protocol:
-  - 384×384 input, batch_size=4, Adam lr=1e-4
-  - ReduceLROnPlateau on validation loss
-  - Early stopping (patience 50) on validation F1
-  - Albumentations augmentation on train only
-  - Metrics: Jaccard, F1, Recall, Precision per epoch
+- 384×384 input, batch_size=4, Adam lr=1e-4
+- ReduceLROnPlateau on validation loss
+- Early stopping (patience 50) on validation F1
+- Albumentations augmentation on train only
+- Metrics: Jaccard, F1, Recall, Precision per epoch
 """
 
+import argparse
+import datetime
 import os
 import time
-import datetime
-import argparse
 
-import numpy as np
-import cv2
 import albumentations as A
+import cv2
+import numpy as np
 import torch
-from torch.utils.data import DataLoader
 from dotenv import load_dotenv
+from torch.utils.data import DataLoader
 
 # Load .env if present so WANDB_API_KEY is available before wandb is imported.
 # We intentionally do not fail when .env is absent — it is optional.
 load_dotenv(dotenv_path=".env", override=False)
 
 import wandb  # noqa: E402  (must come after load_dotenv)
-
-from src.utils import seeding, create_dir, shuffling, epoch_time, print_and_save
+from src.dataset import DC1000Dataset, load_DC1000_data
 from src.metrics import calculate_metrics
-from src.dataset import load_DC1000_data, DC1000Dataset
-from src.models import UNet, DoubleUnet
-
+from src.models import DoubleUnet, UNet
+from src.utils import create_dir, epoch_time, print_and_save, seeding, shuffling
 
 # ==============================================================================
 # Model Registry
@@ -87,7 +84,12 @@ def train_one_epoch(model, loader, optimizer, device):
         epoch_precision += np.mean(batch_precision)
 
     n = len(loader)
-    return epoch_loss / n, [epoch_jac / n, epoch_f1 / n, epoch_recall / n, epoch_precision / n]
+    return epoch_loss / n, [
+        epoch_jac / n,
+        epoch_f1 / n,
+        epoch_recall / n,
+        epoch_precision / n,
+    ]
 
 
 @torch.no_grad()
@@ -123,7 +125,12 @@ def evaluate(model, loader, device):
         epoch_precision += np.mean(batch_precision)
 
     n = len(loader)
-    return epoch_loss / n, [epoch_jac / n, epoch_f1 / n, epoch_recall / n, epoch_precision / n]
+    return epoch_loss / n, [
+        epoch_jac / n,
+        epoch_f1 / n,
+        epoch_recall / n,
+        epoch_precision / n,
+    ]
 
 
 # ==============================================================================
@@ -135,14 +142,30 @@ def main():
     seeding(42)
 
     parser = argparse.ArgumentParser(description="Train a segmentation model on DC1000")
-    parser.add_argument("--model", type=str, default="UNet", choices=list(MODEL_REGISTRY.keys()))
+    parser.add_argument(
+        "--model", type=str, default="UNet", choices=list(MODEL_REGISTRY.keys())
+    )
     parser.add_argument("--data_path", type=str, default="data/DC1000")
-    parser.add_argument("--resume", action="store_true", help="Resume training from checkpoint if it exists")
-    parser.add_argument("--wandb", action="store_true", help="Enable Weights & Biases logging")
-    parser.add_argument("--wandb-project", type=str, default=os.getenv("WANDB_PROJECT", "carries-seg"),
-                        help="wandb project name (default: carries-seg or $WANDB_PROJECT)")
-    parser.add_argument("--wandb-run-name", type=str, default=None,
-                        help="Optional friendly name for this wandb run")
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume training from checkpoint if it exists",
+    )
+    parser.add_argument(
+        "--wandb", action="store_true", help="Enable Weights & Biases logging"
+    )
+    parser.add_argument(
+        "--wandb-project",
+        type=str,
+        default=os.getenv("WANDB_PROJECT", "carries-seg"),
+        help="wandb project name (default: carries-seg or $WANDB_PROJECT)",
+    )
+    parser.add_argument(
+        "--wandb-run-name",
+        type=str,
+        default=None,
+        help="Optional friendly name for this wandb run",
+    )
     opt = parser.parse_args()
 
     # ----- directories -----
@@ -192,31 +215,39 @@ def main():
     )
 
     # ----- dataset -----
-    (train_x, train_y), (valid_x, valid_y), (test_x, test_y) = load_DC1000_data(opt.data_path)
+    (train_x, train_y), (valid_x, valid_y), (test_x, test_y) = load_DC1000_data(
+        opt.data_path
+    )
     train_x, train_y = shuffling(train_x, train_y)
 
     data_str = f"Dataset Size:\nTrain: {len(train_x)} - Valid: {len(valid_x)} - Test: {len(test_x)}\n"
     print_and_save(train_log_path, data_str)
 
     # ----- augmentation (train only) -----
-    transform = A.Compose([
-        A.HorizontalFlip(p=0.5),
-        A.ShiftScaleRotate(
-            shift_limit=0.05,
-            scale_limit=0.05,
-            rotate_limit=15,
-            interpolation=cv2.INTER_LINEAR,
-            border_mode=cv2.BORDER_CONSTANT,
-            p=0.3,
-        ),
-        A.RandomBrightnessContrast(p=0.3),
-    ])
+    transform = A.Compose(
+        [
+            A.HorizontalFlip(p=0.5),
+            A.ShiftScaleRotate(
+                shift_limit=0.05,
+                scale_limit=0.05,
+                rotate_limit=15,
+                interpolation=cv2.INTER_LINEAR,
+                border_mode=cv2.BORDER_CONSTANT,
+                p=0.3,
+            ),
+            A.RandomBrightnessContrast(p=0.3),
+        ]
+    )
 
     train_dataset = DC1000Dataset(train_x, train_y, size, transform=transform)
     valid_dataset = DC1000Dataset(valid_x, valid_y, size, transform=None)
 
-    train_loader = DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True, num_workers=2)
-    valid_loader = DataLoader(dataset=valid_dataset, batch_size=batch_size, shuffle=False, num_workers=2)
+    train_loader = DataLoader(
+        dataset=train_dataset, batch_size=batch_size, shuffle=True, num_workers=2
+    )
+    valid_loader = DataLoader(
+        dataset=valid_dataset, batch_size=batch_size, shuffle=False, num_workers=2
+    )
 
     assert len(train_loader) > 0, "train loader is empty — check data_path"
     assert len(valid_loader) > 0, "valid loader is empty — check data_path"
@@ -230,11 +261,15 @@ def main():
 
     # Resume from checkpoint if requested and a checkpoint exists.
     if opt.resume and os.path.exists(checkpoint_path):
-        model.load_state_dict(torch.load(checkpoint_path, map_location=device, weights_only=True))
+        model.load_state_dict(
+            torch.load(checkpoint_path, map_location=device, weights_only=True)
+        )
         print_and_save(train_log_path, f"Resumed from checkpoint: {checkpoint_path}")
 
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min", patience=5, verbose=True)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, "min", patience=5, verbose=True
+    )
 
     print_and_save(train_log_path, "Optimizer: Adam\n")
 
@@ -245,7 +280,9 @@ def main():
     for epoch in range(num_epochs):
         start_time = time.time()
 
-        train_loss, train_metrics = train_one_epoch(model, train_loader, optimizer, device)
+        train_loss, train_metrics = train_one_epoch(
+            model, train_loader, optimizer, device
+        )
         valid_loss, valid_metrics = evaluate(model, valid_loader, device)
         scheduler.step(valid_loss)
 
@@ -280,21 +317,23 @@ def main():
         print_and_save(train_log_path, data_str)
 
         # Log scalar metrics to wandb. When wandb is disabled this is a no-op.
-        wandb.log({
-            "epoch": epoch + 1,
-            "train/loss": train_loss,
-            "train/jaccard": train_metrics[0],
-            "train/f1": train_metrics[1],
-            "train/recall": train_metrics[2],
-            "train/precision": train_metrics[3],
-            "val/loss": valid_loss,
-            "val/jaccard": valid_metrics[0],
-            "val/f1": valid_metrics[1],
-            "val/recall": valid_metrics[2],
-            "val/precision": valid_metrics[3],
-            "val/best_f1": best_valid_f1,
-            "lr": optimizer.param_groups[0]["lr"],
-        })
+        wandb.log(
+            {
+                "epoch": epoch + 1,
+                "train/loss": train_loss,
+                "train/jaccard": train_metrics[0],
+                "train/f1": train_metrics[1],
+                "train/recall": train_metrics[2],
+                "train/precision": train_metrics[3],
+                "val/loss": valid_loss,
+                "val/jaccard": valid_metrics[0],
+                "val/f1": valid_metrics[1],
+                "val/recall": valid_metrics[2],
+                "val/precision": valid_metrics[3],
+                "val/best_f1": best_valid_f1,
+                "lr": optimizer.param_groups[0]["lr"],
+            }
+        )
 
         if early_stopping_count == early_stopping_patience:
             data_str = (

@@ -14,10 +14,9 @@ Uses DiceFocal loss, matching the reference repo interface.
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torchvision.models import vgg19, VGG19_Weights
+from torchvision.models import VGG19_Weights, vgg19
 
 from src.losses import DiceFocalLoss
-
 
 # ==============================================================================
 # Building Blocks
@@ -40,7 +39,14 @@ class Conv2D(nn.Module):
         super().__init__()
         self.act = act
         self.conv = nn.Sequential(
-            nn.Conv2d(in_c, out_c, kernel_size=kernel_size, padding=padding, dilation=dilation, bias=bias),
+            nn.Conv2d(
+                in_c,
+                out_c,
+                kernel_size=kernel_size,
+                padding=padding,
+                dilation=dilation,
+                bias=bias,
+            ),
             nn.BatchNorm2d(out_c),
         )
         self.relu = nn.ReLU(inplace=True)
@@ -210,10 +216,10 @@ class Decoder2(nn.Module):
         super().__init__()
         self.up = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True)
         # Channel counts account for concatenation of bottleneck + skip1 + skip2
-        self.c1 = SEConvBlock(832, 256)   # 320 + 512
-        self.c2 = SEConvBlock(640, 128)   # 256 + 256 + 128
-        self.c3 = SEConvBlock(320, 64)    # 128 + 128 + 64
-        self.c4 = SEConvBlock(160, 32)    # 64 + 64 + 32
+        self.c1 = SEConvBlock(832, 256)  # 320 + 512
+        self.c2 = SEConvBlock(640, 128)  # 256 + 256 + 128
+        self.c3 = SEConvBlock(320, 64)  # 128 + 128 + 64
+        self.c4 = SEConvBlock(160, 32)  # 64 + 64 + 32
 
     def forward(
         self,
@@ -262,7 +268,9 @@ class DoubleUnet(nn.Module):
         self.d2 = Decoder2()
         self.y2 = nn.Conv2d(32, 1, kernel_size=1, padding=0)
 
-        self.loss_fn = DiceFocalLoss(alpha=0.75, gamma=2.0, dice_weight=0.5, focal_weight=0.5)
+        self.loss_fn = DiceFocalLoss(
+            alpha=0.75, gamma=2.0, dice_weight=0.5, focal_weight=0.5
+        )
 
     def forward(self, sample: dict) -> dict:
         x = sample["images"]

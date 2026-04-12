@@ -21,8 +21,7 @@ def F2(y_true: np.ndarray, y_pred: np.ndarray, beta: float = 2.0) -> float:
 
 def dice_score(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     return float(
-        (2 * (y_true * y_pred).sum() + 1e-15)
-        / (y_true.sum() + y_pred.sum() + 1e-15)
+        (2 * (y_true * y_pred).sum() + 1e-15) / (y_true.sum() + y_pred.sum() + 1e-15)
     )
 
 
@@ -36,9 +35,7 @@ def hd_dist(preds: np.ndarray, targets: np.ndarray) -> float:
     return float(directed_hausdorff(preds, targets)[0])
 
 
-def calculate_metrics(
-    y_true: "torch.Tensor", y_pred: "torch.Tensor"
-) -> list[float]:
+def calculate_metrics(y_true: "torch.Tensor", y_pred: "torch.Tensor") -> list[float]:
     """Compute all metrics from raw tensors. Returns [jac, f1, recall, precision, acc, f2, hd]."""
     import torch  # deferred to avoid circular import at module level
 

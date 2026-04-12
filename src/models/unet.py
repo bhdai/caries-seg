@@ -82,7 +82,9 @@ class UNet(nn.Module):
 
         self.Conv = nn.Conv2d(filters[0], out_ch, kernel_size=1, stride=1, padding=0)
 
-        self.loss_fn = DiceFocalLoss(alpha=0.75, gamma=2.0, dice_weight=0.5, focal_weight=0.5)
+        self.loss_fn = DiceFocalLoss(
+            alpha=0.75, gamma=2.0, dice_weight=0.5, focal_weight=0.5
+        )
 
     def forward(self, sample: dict) -> dict:
         x = sample["images"]
