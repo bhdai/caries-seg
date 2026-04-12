@@ -14,4 +14,5 @@ docs/todo.md
 tmp/
 .env
 files/
+Makefile.local
 wandb/

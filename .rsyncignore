@@ -1,0 +1,14 @@
+.git/
+.github/
+.agent/
+.venv/
+data/
+docs/
+references/
+wandb/
+files/
+__pycache__/
+*.py[oc]
+*.egg-info/
+build/
+dist/

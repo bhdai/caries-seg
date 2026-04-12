@@ -1,0 +1,8 @@
+# Makefile.local — machine-specific config, never committed.
+# Copy this file to Makefile.local and fill in your values.
+#   cp Makefile.local.example Makefile.local
+
+SERVER_USER = your_username
+SERVER_HOST = your.server.address
+# Remote path where the project will be synced to.
+REMOTE_PATH = ~/carries-seg
