@@ -268,7 +268,9 @@ def main():
 
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, "min", patience=5, verbose=True
+        optimizer,
+        "min",
+        patience=5,
     )
 
     print_and_save(train_log_path, "Optimizer: Adam\n")
