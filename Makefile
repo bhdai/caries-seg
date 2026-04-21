@@ -33,7 +33,7 @@ _check-server-vars:
 
 .PHONY: sync
 sync: _check-server-vars
-	rsync -avz --checksum --delete \
+	rsync -avz --checksum \
 		--exclude-from=.rsyncignore \
 		./ $(SERVER_USER)@$(SERVER_HOST):$(REMOTE_PATH)/
 
@@ -43,7 +43,7 @@ sync: _check-server-vars
 
 .PHONY: sync-dry
 sync-dry: _check-server-vars
-	rsync -avzn --checksum --delete \
+	rsync -avzn --checksum \
 		--exclude-from=.rsyncignore \
 		./ $(SERVER_USER)@$(SERVER_HOST):$(REMOTE_PATH)/
 
