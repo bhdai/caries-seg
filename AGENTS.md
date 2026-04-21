@@ -111,73 +111,39 @@ Avoid over-documenting:
 - Trivial getters/setters or obvious wrapper code
 - Code that's primarily syntactic sugar over well-known patterns
 
-## Claude Code sandbox insights
+## Github Copilot run command in fish shell insights
 
-### Pipe workaround (trailing `;`)
+Github copilot have a problem running multiple lines command in fish shell
 
-The sandbox has a [known issue][cc-16305] where data is silently
-dropped in shell pipes between commands. Appending a trailing `;` to
-the command fixes this:
+For example:
 
-```sh
-# Broken (downstream receives no input):
-diff <(jq -S . a.json) <(jq -S . b.json)
+```bash
 
-# Fixed — append `;`:
-diff <(jq -S . a.json) <(jq -S . b.json);
-echo "abc" | grep "abc";
+uv run python -c "
+import sys
+sys.stdout.flush()
+import torch
+import torch.nn as nn
+from src.losses import DiceFocalLoss
+from src.models.attention_unet import ConvBlock, UpConv, AttentionGate
+print('step 1', flush=True)
+filters = [64, 128, 256, 512, 1024]
+c1 = ConvBlock(3, filters[0])
+print('step 2', flush=True)
+c5 = ConvBlock(filters[3], filters[4])
+print('step 3', flush=True)
+up5 = UpConv(filters[4], filters[3])
+print('step 4', flush=True)
+att5 = AttentionGate(F_g=filters[3], F_l=filters[3], F_int=filters[2])
+print('step 5', flush=True)
+loss = DiceFocalLoss(alpha=0.75, gamma=2.0, dice_weight=0.5, focal_weight=0.5)
+print('step 6 all done', flush=True)
+"
 ```
 
-This affects pipes (`|`), process substitution (`<(...)`), and any
-command that connects stdout of one process to stdin of another.
+This will not work in fish shell if run this through github copilot interface it will split the lines and run each lines as separate command in vscode github copilot terminal
 
-[cc-16305]: https://github.com/anthropics/claude-code/issues/16305
-
-### `!` (negation) workaround
-
-The sandbox has a [separate bug][cc-24136] where the bash `!` keyword
-(pipeline negation operator) is treated as a literal command name. The
-command after `!` **never executes**. This affects `if !`, `while !`,
-and bare `!`. The trailing-`;` workaround does **not** fix this.
-
-```sh
-# Broken:
-if ! some_command; then handle_failure; fi
-
-# Workaround — capture $?:
-some_command; rc=$?
-if [ "$rc" -ne 0 ]; then handle_failure; fi
-
-# Broken:
-while ! some_command; do sleep 1; done
-
-# Workaround — use `until`:
-until some_command; do sleep 1; done
-```
-
-[cc-24136]: https://github.com/anthropics/claude-code/issues/24136
-
-### Unsandboxable commands
-
-The following commands can never be run successfully inside the sandbox,
-and thus must always be run with `dangerouslyDisableSandbox: true`.
-Because they cannot be run inside the sandbox, avoid running them in
-bash invocations with other commands (e.g., using `|`, `&&` or `||`).
-Instead, capture their output to a file, and then operate on that file
-in subsequent commands, which can then be sandboxed.
-
-Known unsandboxable commands are:
-
-- `gh`
-- `perf record` (but _not_ `perf script`)
-
-### Sandbox discipline
-
-Never use `dangerouslyDisableSandbox` preemptively. Always attempt
-commands in the default sandbox first. Only bypass the sandbox after
-observing an actual permission error, and document which error
-triggered the bypass. The standing exceptions are the commands known to
-be unsandboxable.
+If you need to run the multiple lines commands please write to a file in tmp/ folder and run the file from there
 
 ### Prefer temp files over pipes for sub-agent CLI testing
 
