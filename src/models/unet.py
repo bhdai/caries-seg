@@ -88,7 +88,7 @@ class UNet(nn.Module):
 
     def forward(self, sample: dict) -> dict:
         x = sample["images"]
-        y = sample["masks"]
+        y = sample.get("masks")
 
         # Encoder path
         e1 = self.Conv1(x)
@@ -124,5 +124,7 @@ class UNet(nn.Module):
 
         out = self.Conv(d2)
 
-        loss = self.loss_fn(out, y)
-        return {"prediction": out, "loss": loss}
+        result: dict = {"prediction": out}
+        if y is not None:
+            result["loss"] = self.loss_fn(out, y)
+        return result

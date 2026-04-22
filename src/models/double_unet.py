@@ -274,7 +274,7 @@ class DoubleUnet(nn.Module):
 
     def forward(self, sample: dict) -> dict:
         x = sample["images"]
-        y = sample["masks"]
+        y = sample.get("masks")
 
         # Network 1 forward
         x0 = x
@@ -292,9 +292,11 @@ class DoubleUnet(nn.Module):
         x_dec2 = self.d2(x_enc2, skip1, skip2)
         y2 = self.y2(x_dec2)
 
-        # Both outputs are supervised
-        loss1 = self.loss_fn(y1, y)
-        loss2 = self.loss_fn(y2, y)
-        loss = loss1 + loss2
+        result: dict = {"prediction": y2}
+        if y is not None:
+            # Both outputs are supervised
+            loss1 = self.loss_fn(y1, y)
+            loss2 = self.loss_fn(y2, y)
+            result["loss"] = loss1 + loss2
 
-        return {"prediction": y2, "loss": loss}
+        return result
