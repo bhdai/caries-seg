@@ -1,0 +1,10 @@
+# Exclude the local node_modules — rebuilt inside the container from
+# package-lock.json via `npm ci`.
+node_modules
+
+# Vite build output.
+dist
+
+# Editor / OS noise.
+.DS_Store
+*.swp

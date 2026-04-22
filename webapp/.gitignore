@@ -1,0 +1,27 @@
+# Local environment file — never commit this.
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Node
+node_modules/
+frontend/node_modules/
+
+# Vite build output
+frontend/dist/
+
+# Test artefacts
+.pytest_cache/
+htmlcov/
+.coverage
+coverage/
+
+# Alembic — do not ignore migration scripts, only tool artefacts.
+alembic/__pycache__/

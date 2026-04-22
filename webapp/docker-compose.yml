@@ -1,0 +1,84 @@
+services:
+  # ===========================================================================
+  # PostgreSQL — persistent job metadata store.
+  #
+  # The data volume survives container restarts.  Connections are gated on
+  # the healthcheck so dependant services only start when the DB is ready.
+  # ===========================================================================
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-caries}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-caries}
+      POSTGRES_DB: ${POSTGRES_DB:-caries_seg}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-caries}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      # Exposed for local psql / Alembic migrations from the host.
+      - "5432:5432"
+
+  # ===========================================================================
+  # Backend — FastAPI inference service.
+  #
+  # Build context is the monorepo root so the Dockerfile can COPY src/ and
+  # webapp/backend/ in one stage.  The files/ directory is bind-mounted
+  # read-only so model checkpoints are never duplicated inside the image.
+  # ===========================================================================
+  backend:
+    build:
+      context: ..
+      dockerfile: webapp/backend/Dockerfile
+    env_file: .env
+    environment:
+      # DATABASE_URL overrides whatever is in .env so the backend always
+      # reaches the Compose postgres service by its service name.
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-caries}:${POSTGRES_PASSWORD:-caries}@postgres:5432/${POSTGRES_DB:-caries_seg}
+      STORAGE_ROOT: /storage
+      MODEL_ROOT: /models
+    volumes:
+      # Uploaded images and generated masks persist across restarts.
+      - storage_vol:/storage
+      # Model checkpoints from the monorepo files/ directory; read-only.
+      - ../files:/models:ro
+    healthcheck:
+      # Use Python's built-in urllib so we don't need curl in the slim image.
+      test:
+        - "CMD"
+        - "python"
+        - "-c"
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+  # ===========================================================================
+  # Frontend — Vite dev server (React + shadcn/ui).
+  #
+  # In development the Vite HMR server runs on port 5173.  The API_URL
+  # env var is baked into the bundle at build time via Vite's define.
+  # ===========================================================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    environment:
+      VITE_API_URL: http://localhost:8000
+    depends_on:
+      - backend
+    ports:
+      - "5173:5173"
+
+volumes:
+  postgres_data:
+  storage_vol:

@@ -1,0 +1,17 @@
+# Exclude the local virtual environment — it is platform-specific and must
+# be rebuilt inside the container.
+webapp/backend/.venv
+
+# Python bytecode artefacts (regenerated inside the image).
+**/__pycache__
+**/*.pyc
+**/*.pyo
+
+# Test and coverage artefacts.
+webapp/backend/.pytest_cache
+webapp/backend/htmlcov
+webapp/backend/.coverage
+
+# Editor / OS noise.
+**/.DS_Store
+**/*.swp
