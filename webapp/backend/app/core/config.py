@@ -8,6 +8,7 @@ startup error rather than a cryptic ``KeyError`` at call time.
 
 from __future__ import annotations
 
+from functools import lru_cache
 from pathlib import Path
 
 from pydantic import field_validator
@@ -66,6 +67,13 @@ class Settings(BaseSettings):
         return v
 
 
-# Module-level singleton — imported by all other modules as:
-#   from app.core.config import settings
-settings = Settings()  # type: ignore[call-arg]
+@lru_cache
+def get_settings() -> Settings:
+    """Return the cached application settings.
+
+    Uses ``functools.lru_cache`` so that settings are loaded from the
+    environment exactly once per process lifetime.  Tests override this
+    dependency via ``app.dependency_overrides`` to inject test-specific
+    values without touching the environment.
+    """
+    return Settings()  # type: ignore[call-arg]

@@ -1,19 +1,14 @@
-"""Initial schema — jobs and image_results tables.
+"""Initial schema for jobs and image_results.
 
 Revision ID: 001
 Revises: (none)
 Create Date: 2026-04-22
-
-Creates:
-  - PostgreSQL enum types: jobstatus, pipelinetype, modelarch
-  - Table: jobs
-  - Table: image_results  (FK → jobs.id CASCADE DELETE)
 """
 
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "001"
@@ -23,32 +18,36 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # ------------------------------------------------------------------
-    # Enum types
-    #
-    # Creating them explicitly (rather than via SQLAlchemy Enum's
-    # create_constraint=True) gives us control over when they are
-    # dropped and avoids conflicts if an enum is shared across tables.
-    # ------------------------------------------------------------------
+    # The migration uses gen_random_uuid() server defaults, so pgcrypto
+    # must exist before either table is created.
+    op.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto")
+
     job_status = postgresql.ENUM(
-        "pending", "processing", "completed", "failed",
+        "pending",
+        "processing",
+        "completed",
+        "failed",
         name="jobstatus",
+        create_type=False,
     )
     pipeline_type = postgresql.ENUM(
-        "single_stage", "two_stage",
+        "single_stage",
+        "two_stage",
         name="pipelinetype",
+        create_type=False,
     )
     model_arch = postgresql.ENUM(
-        "unet", "double_unet", "attention_unet",
+        "unet",
+        "double_unet",
+        "attention_unet",
         name="modelarch",
+        create_type=False,
     )
+
     job_status.create(op.get_bind(), checkfirst=True)
     pipeline_type.create(op.get_bind(), checkfirst=True)
     model_arch.create(op.get_bind(), checkfirst=True)
 
-    # ------------------------------------------------------------------
-    # jobs table
-    # ------------------------------------------------------------------
     op.create_table(
         "jobs",
         sa.Column(
@@ -59,18 +58,18 @@ def upgrade() -> None:
         ),
         sa.Column(
             "status",
-            sa.Enum("pending", "processing", "completed", "failed", name="jobstatus", create_type=False),
+            job_status,
             nullable=False,
             server_default="pending",
         ),
         sa.Column(
             "pipeline_type",
-            sa.Enum("single_stage", "two_stage", name="pipelinetype", create_type=False),
+            pipeline_type,
             nullable=False,
         ),
         sa.Column(
             "model_arch",
-            sa.Enum("unet", "double_unet", "attention_unet", name="modelarch", create_type=False),
+            model_arch,
             nullable=False,
         ),
         sa.Column("error_message", sa.Text(), nullable=True),
@@ -88,13 +87,8 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("id"),
     )
-
-    # Index to support polling queries filtered by status.
     op.create_index("ix_jobs_status", "jobs", ["status"])
 
-    # ------------------------------------------------------------------
-    # image_results table
-    # ------------------------------------------------------------------
     op.create_table(
         "image_results",
         sa.Column(
@@ -108,19 +102,12 @@ def upgrade() -> None:
             postgresql.UUID(as_uuid=True),
             nullable=False,
         ),
-        # Original filename as submitted by the browser.
         sa.Column("original_filename", sa.String(255), nullable=False),
-        # Absolute path inside the storage volume where the raw upload lives.
         sa.Column("upload_path", sa.String(1024), nullable=False),
-        # Resized display copy for fast browser rendering (null until produced).
         sa.Column("display_path", sa.String(1024), nullable=True),
-        # Binary mask PNG path (null until inference completes).
         sa.Column("mask_path", sa.String(1024), nullable=True),
-        # YOLO bounding boxes; null for single-stage jobs.
         sa.Column("bounding_boxes", postgresql.JSONB(), nullable=True),
-        # Wall-clock inference duration in milliseconds (null until complete).
         sa.Column("inference_time_ms", sa.Integer(), nullable=True),
-        # Original image dimensions, e.g. {"width": 2048, "height": 1024}.
         sa.Column("original_size", postgresql.JSONB(), nullable=False),
         sa.Column(
             "created_at",
@@ -128,15 +115,9 @@ def upgrade() -> None:
             server_default=sa.text("now()"),
             nullable=False,
         ),
-        sa.ForeignKeyConstraint(
-            ["job_id"],
-            ["jobs.id"],
-            ondelete="CASCADE",
-        ),
+        sa.ForeignKeyConstraint(["job_id"], ["jobs.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
-
-    # Index to support fetching all results for a given job in one query.
     op.create_index("ix_image_results_job_id", "image_results", ["job_id"])
 
 
@@ -145,8 +126,6 @@ def downgrade() -> None:
     op.drop_table("image_results")
     op.drop_index("ix_jobs_status", table_name="jobs")
     op.drop_table("jobs")
-
-    # Drop enum types after their dependent tables are gone.
     op.execute("DROP TYPE IF EXISTS modelarch")
     op.execute("DROP TYPE IF EXISTS pipelinetype")
     op.execute("DROP TYPE IF EXISTS jobstatus")

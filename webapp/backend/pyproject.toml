@@ -63,3 +63,9 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 # Only package the app/ directory; src/ is copied separately by the Dockerfile.
 packages = ["app"]
+
+[tool.pytest.ini_options]
+# Use asyncio_mode = "auto" so all async test functions are treated as
+# asyncio coroutines without requiring an explicit @pytest.mark.asyncio
+# decorator on every test.
+asyncio_mode = "auto"

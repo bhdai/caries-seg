@@ -8,3 +8,4 @@
 - Training metrics are computed while the model remains in train mode immediately after the optimizer step; BatchNorm makes those train-set numbers noisier and not directly comparable to validation metrics gathered in eval mode.
 - `DiceFocalLoss` flattens the entire batch into one Dice term instead of averaging per-sample Dice, which lets easy/background-heavy samples dominate the overlap loss and diverges from the per-sample metrics being reported.
 - Reproducibility is currently fragile because experiment outputs/checkpoints are not discoverable from the repository state and there are no train/test Makefile targets or README run commands documenting the exact baseline and evaluation procedure.
+- VS Code Python analysis in the repo currently resolves against the root virtualenv, so `webapp/backend` shows unresolved imports for backend-only dependencies unless the editor environment is switched to the backend environment.

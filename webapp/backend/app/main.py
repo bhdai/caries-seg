@@ -1,19 +1,23 @@
 """FastAPI application factory.
 
-Phase 1 — skeleton only:
-  - Lifespan context manager (startup / shutdown hooks; inference wiring
-    is added in Phase 3).
-  - ``GET /health`` endpoint for Docker health checks and service readiness.
-  - API router placeholder (routes are mounted in Phase 2).
+Phase 2 additions:
+  - ``init_db()`` called in the lifespan so the async engine is ready
+    before the first request arrives.
+  - API router mounted at ``/api``.
+
+Phase 3 will add model loading and stale-job cleanup to the lifespan.
 """
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+from app.core.config import get_settings
+from app.core.database import init_db
 
 
 @asynccontextmanager
@@ -21,11 +25,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Application lifespan manager.
 
     Startup:
-      Phase 3 will add model loading and stale-job cleanup here.
+      1. Initialise the async database engine from ``Settings.DATABASE_URL``.
+      2. TODO (Phase 3): load ModelRegistry and mark stale processing jobs
+         as ``failed``.
 
     Shutdown:
       No-op — Python GC releases model tensors.
     """
+    settings = get_settings()
+    init_db(settings.DATABASE_URL)
     # TODO (Phase 3): load ModelRegistry and mark stale processing jobs failed.
     yield
 
@@ -56,9 +64,9 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # TODO (Phase 2): mount the API router here.
-    #   from app.api.routes import router
-    #   application.include_router(router, prefix="/api")
+    from app.api.routes import router
+
+    application.include_router(router, prefix="/api")
 
     return application
 
