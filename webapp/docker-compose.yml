@@ -14,7 +14,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-caries}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-caries} -d ${POSTGRES_DB:-caries_seg}"]
       interval: 5s
       timeout: 5s
       retries: 10

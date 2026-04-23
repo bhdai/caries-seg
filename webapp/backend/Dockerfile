@@ -77,7 +77,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 # Minimal runtime libraries for asyncpg's libpq dependency.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        libpq5 \
+    libglib2.0-0 \
+    libgl1 \
+    libpq5 \
+    libxcb1 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -87,5 +90,6 @@ COPY --from=builder /app /app
 
 EXPOSE 8000
 
-# uvicorn is installed inside the venv as part of fastapi[standard].
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Apply schema migrations on container start so a fresh Compose database has
+# the tables required by the lifespan startup queries before uvicorn boots.
+CMD ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]
