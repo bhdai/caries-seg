@@ -34,7 +34,6 @@ class PipelineType(str, enum.Enum):
 class ModelArch(str, enum.Enum):
     unet = "unet"
     double_unet = "double_unet"
-    attention_unet = "attention_unet"
 
 
 class Job(Base):
@@ -68,7 +67,7 @@ class Job(Base):
     )
     model_arch: Mapped[str] = mapped_column(
         Enum(
-            "unet", "double_unet", "attention_unet",
+            "unet", "double_unet",
             name="modelarch",
             create_type=False,
         ),

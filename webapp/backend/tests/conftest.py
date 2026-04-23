@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 
@@ -13,11 +14,18 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 from testcontainers.postgres import PostgresContainer
 
+# ---------------------------------------------------------------------------
+# Add the monorepo root to sys.path so that ``src`` (which contains the
+# ML model definitions) is importable when running tests locally, mirroring
+# the Docker build layout where src/ is copied alongside app/.
+# ---------------------------------------------------------------------------
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+MONOREPO_ROOT = BACKEND_ROOT.parents[1]
+if str(MONOREPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(MONOREPO_ROOT))
+
 from app.core.config import get_settings
 from app.main import create_app
-
-
-BACKEND_ROOT = Path(__file__).resolve().parents[1]
 _TRUNCATE_ALL_TABLES = "TRUNCATE TABLE image_results, jobs RESTART IDENTITY CASCADE"
 
 

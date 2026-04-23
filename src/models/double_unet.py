@@ -128,11 +128,19 @@ class SEConvBlock(nn.Module):
 
 
 class Encoder1(nn.Module):
-    """VGG-19-based encoder (pretrained)."""
+    """VGG-19-based encoder (pretrained).
 
-    def __init__(self):
+    Args:
+        weights: Weights to pass to ``torchvision.models.vgg19``.
+            Pass ``None`` to skip the pre-trained weight download (e.g.
+            during inference when a full ``state_dict`` checkpoint is
+            loaded afterwards).  Defaults to ``VGG19_Weights.DEFAULT``
+            which preserves the existing training behaviour.
+    """
+
+    def __init__(self, weights=VGG19_Weights.DEFAULT):
         super().__init__()
-        network = vgg19(weights=VGG19_Weights.DEFAULT)
+        network = vgg19(weights=weights)
         self.x1 = network.features[:4]
         self.x2 = network.features[4:9]
         self.x3 = network.features[9:18]
@@ -252,11 +260,13 @@ class Decoder2(nn.Module):
 
 
 class DoubleUnet(nn.Module):
-    def __init__(self):
+    def __init__(self, vgg19_weights=VGG19_Weights.DEFAULT):
         super().__init__()
 
         # Network 1
-        self.e1 = Encoder1()
+        # Pass the vgg19_weights parameter through so callers can disable
+        # the pre-trained weight download when loading a full checkpoint.
+        self.e1 = Encoder1(weights=vgg19_weights)
         self.a1 = ASPP(512, 64)
         self.d1 = Decoder1()
         self.y1 = nn.Conv2d(32, 1, kernel_size=1, padding=0)

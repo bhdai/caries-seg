@@ -34,4 +34,4 @@ class JobResponse(BaseModel):
 # in the routes module.
 # ---------------------------------------------------------------------------
 PipelineTypeField = Literal["single_stage", "two_stage"]
-ModelArchField = Literal["unet", "double_unet", "attention_unet"]
+ModelArchField = Literal["unet", "double_unet"]

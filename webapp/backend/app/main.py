@@ -5,7 +5,12 @@ Phase 2 additions:
     before the first request arrives.
   - API router mounted at ``/api``.
 
-Phase 3 will add model loading and stale-job cleanup to the lifespan.
+Phase 3 additions:
+  - ``init_registry()`` called in the lifespan to eagerly load all model
+    checkpoints.  Startup fails fast (non-zero exit) if a required import
+    is missing; missing checkpoint files log a WARNING instead.
+  - Stale ``processing`` jobs are marked ``failed`` on startup so the
+    UI doesn't hang if the backend restarted mid-inference.
 """
 
 from __future__ import annotations
@@ -15,9 +20,12 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import update
 
 from app.core.config import get_settings
-from app.core.database import init_db
+from app.core.database import get_session_factory, init_db
+from app.inference.registry import init_registry
+from app.models.job import Job, JobStatus
 
 
 @asynccontextmanager
@@ -26,15 +34,41 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     Startup:
       1. Initialise the async database engine from ``Settings.DATABASE_URL``.
-      2. TODO (Phase 3): load ModelRegistry and mark stale processing jobs
-         as ``failed``.
+      2. Load all model checkpoints into the ``ModelRegistry`` singleton.
+         Missing checkpoint files are logged as WARNINGs (not errors) so the
+         app starts with a partial model set.
+      3. Mark any ``processing`` jobs as ``failed`` — these were in-flight
+         when the backend last restarted and will never complete.
 
     Shutdown:
       No-op — Python GC releases model tensors.
     """
     settings = get_settings()
     init_db(settings.DATABASE_URL)
-    # TODO (Phase 3): load ModelRegistry and mark stale processing jobs failed.
+
+    # Load model checkpoints eagerly so the first inference request does not
+    # incur a cold-start penalty.  init_registry logs a warning per missing
+    # checkpoint rather than raising.
+    init_registry(settings)
+
+    # Recover from a mid-inference backend restart: any job still in
+    # "processing" state is now permanently stuck because the background
+    # task was lost.  Mark them failed so the frontend can show an error.
+    session_factory = get_session_factory()
+    async with session_factory() as session:
+        await session.execute(
+            update(Job)
+            .where(Job.status == JobStatus.processing)
+            .values(
+                status=JobStatus.failed,
+                error_message=(
+                    "Backend restarted while this job was in progress. "
+                    "Please resubmit."
+                ),
+            )
+        )
+        await session.commit()
+
     yield
 
 

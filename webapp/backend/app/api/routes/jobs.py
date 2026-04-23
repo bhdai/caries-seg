@@ -1,16 +1,4 @@
-"""POST /api/jobs and GET /api/jobs/{job_id} route handlers.
-
-Phase 2 stub behaviour
-~~~~~~~~~~~~~~~~~~~~~~
-``POST /api/jobs`` validates and persists the upload, then immediately
-sets ``job.status = "completed"`` (with ``mask_path = None``).
-The display copy *is* produced at this stage because it requires only a
-resize — no model weights.  ``mask_path`` and ``bounding_boxes`` remain
-``None`` until Phase 3 wires in ``BackgroundTasks(run_inference, …)``.
-
-``GET /api/jobs/{job_id}`` is already the final implementation: it simply
-fetches and returns the full job + image-results payload.
-"""
+"""POST /api/jobs and GET /api/jobs/{job_id} route handlers."""
 
 from __future__ import annotations
 
@@ -19,13 +7,14 @@ from typing import Annotated
 
 import cv2
 import numpy as np
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from app.core.config import Settings, get_settings
-from app.core.database import get_db
+from app.core.database import get_db, get_session_factory
 from app.core.storage import StorageError, save_display_copy, save_upload
+from app.inference.worker import run_inference
 from app.models.image_result import ImageResult
 from app.models.job import Job, JobStatus
 from app.schemas.job import JobResponse, ModelArchField, PipelineTypeField
@@ -57,20 +46,18 @@ async def create_job(
     ],
     pipeline_type: Annotated[PipelineTypeField, Form()],
     model_arch: Annotated[ModelArchField, Form()],
+    background_tasks: BackgroundTasks,
     db: Annotated[AsyncSession, Depends(get_db)],
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> JobResponse:
     """Accept an inference job submission.
 
     Validates uploaded files (size, MIME type), writes them to the storage
-    volume, creates ``Job`` and ``ImageResult`` rows, and returns the job
-    payload.
-
-    Phase 2 stub: no background inference is enqueued.  The job is set to
-    ``"completed"`` immediately; ``mask_path`` is ``None`` for all results.
+    volume, creates ``Job`` and ``ImageResult`` rows, and enqueues the
+    inference background task.
 
     Returns:
-        HTTP 202 with the full ``JobResponse`` payload.
+        HTTP 202 with the full ``JobResponse`` payload (status=``"pending"``).
 
     Raises:
         HTTPException 413: Any file exceeds 10 MB.
@@ -180,13 +167,14 @@ async def create_job(
         )
         db.add(image_result)
 
-    # Phase 2 stub: mark completed immediately (no inference enqueued yet).
-    job.status = JobStatus.completed
-
     # Flush so that the ORM relationships are populated before we build
     # the response; get_db will commit after this handler returns.
     await db.flush()
     await db.refresh(job)
+
+    # Enqueue the inference background task.  The task opens its own DB
+    # session so it is decoupled from this request's transaction.
+    background_tasks.add_task(run_inference, job_id, get_session_factory())
 
     return JobResponse.model_validate(job)
 

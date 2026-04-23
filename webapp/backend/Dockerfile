@@ -49,7 +49,7 @@ WORKDIR /app
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=webapp/backend/pyproject.toml,target=pyproject.toml \
     --mount=type=bind,source=webapp/backend/uv.lock,target=uv.lock \
-    uv sync --frozen --no-install-project --no-dev --no-editable
+    uv sync --frozen --extra inference --no-install-project --no-dev --no-editable
 
 # ------------------------------------------------------------------
 # Layer B — copy application code and install the project itself.
@@ -63,7 +63,7 @@ COPY webapp/backend/ ./
 # Install the project in non-editable mode so the .venv is
 # self-contained and can be copied to the runtime stage.
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --no-editable
+    uv sync --frozen --extra inference --no-dev --no-editable
 
 # ---------------------------------------------------------------------------
 # Stage 2 — runtime image
