@@ -73,7 +73,9 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     environment:
-      VITE_API_URL: http://localhost:8000
+      # Inside the Compose network the backend is reachable by its service
+      # name, not by localhost (which resolves to the frontend container itself).
+      VITE_API_URL: http://backend:8000
     depends_on:
       - backend
     ports:

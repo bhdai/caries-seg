@@ -12,3 +12,4 @@
 - The Phase 3 web backend still accepts `attention_unet` in the job schema/ORM even though the registry never loads that architecture, so those requests are accepted and then fail asynchronously at inference time instead of being rejected up front.
 - Phase 3 eager loading instantiates `DoubleUnet()` exactly as defined in `src/models/double_unet.py`, which still requests `VGG19_Weights.DEFAULT`; on a clean/offline deploy this can block or fail startup/model availability even when the local checkpoint file exists.
 - The backend Docker image still runs `uv sync` without `--extra inference`, so the new Phase 3 startup path can ship a container missing `torch`, `torchvision`, and `ultralytics` even though `app.main` now imports the inference registry during startup.
+- The web frontend advertises a 20 MB per-image upload limit, but `POST /api/jobs` rejects anything over 10 MB; align the client copy and dropzone validation with the backend limit.

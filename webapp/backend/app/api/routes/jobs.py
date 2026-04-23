@@ -167,9 +167,13 @@ async def create_job(
         )
         db.add(image_result)
 
-    # Flush so that the ORM relationships are populated before we build
-    # the response; get_db will commit after this handler returns.
-    await db.flush()
+    # Commit now — before enqueueing the background task — so that the job
+    # and image_result rows are visible in the database when run_inference
+    # opens its own session.  FastAPI BackgroundTasks execute after the
+    # response is sent but before yield-dependency teardown, so without
+    # this explicit commit the background task would race against the
+    # get_db cleanup commit and see no rows.
+    await db.commit()
     await db.refresh(job)
 
     # Enqueue the inference background task.  The task opens its own DB
