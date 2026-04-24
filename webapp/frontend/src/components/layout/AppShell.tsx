@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { LayoutDashboard, Clock, UploadCloud } from "lucide-react";
 import type { ReactNode } from "react";
 import { NavLink, useLocation } from "react-router-dom";
+import { useStartNewJob } from "@/hooks/useStartNewJob";
 
 interface AppShellProps {
   children: ReactNode;
@@ -24,6 +25,7 @@ interface AppShellProps {
  */
 export function AppShell({ children }: AppShellProps) {
   const location = useLocation();
+  const startNewJob = useStartNewJob();
 
   // Determine whether we are in the multi-step upload flow so we can hide
   // redundant nav items and keep the flow focused.
@@ -56,11 +58,9 @@ export function AppShell({ children }: AppShellProps) {
               History
             </NavItem>
             {/* Upload CTA is always visible for quick access */}
-            <Button asChild size="sm" className="ml-2">
-              <NavLink to="/upload">
-                <UploadCloud className="h-4 w-4 mr-1.5" />
-                New Job
-              </NavLink>
+            <Button size="sm" className="ml-2" onClick={startNewJob}>
+              <UploadCloud className="h-4 w-4 mr-1.5" />
+              New Job
             </Button>
           </nav>
         </div>

@@ -6,7 +6,7 @@
 // shadcn table primitives.
 //
 // Column layout (left → right):
-//   Status | File | Pipeline · Model | Images | Last Activity | Actions
+//   Select | Status | File | Pipeline · Model | Images | Last Activity | Actions
 //
 // TanStack Table is used here for its column-definition API and the ability
 // to add client-side sorting or column visibility toggles in a later phase
@@ -38,6 +38,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { JobStatusChip } from "@/components/jobs/JobStatusChip";
 import { JobRowActions } from "@/components/history/JobRowActions";
@@ -78,6 +79,9 @@ export interface JobsTableProps {
    */
   rerunPendingJobId: string | undefined;
 
+  /** The set of currently selected job IDs. */
+  selectedIds: Set<string>;
+
   /** Called when the user resets filters from the empty state. */
   onResetFilters: () => void;
 
@@ -86,6 +90,15 @@ export interface JobsTableProps {
 
   /** Called when the user selects "Rerun" for a row. */
   onRerun: (jobId: string) => void;
+
+  /** Called when the user confirms deletion of a single row. */
+  onDeleteOne: (jobId: string) => void;
+
+  /** Called when the user toggles the row checkbox. */
+  onToggleSelect: (jobId: string) => void;
+
+  /** Called when the user clicks the header "select all" checkbox. */
+  onSelectAll: (allIds: string[]) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -96,11 +109,44 @@ export interface JobsTableProps {
 // re-instantiated on every render.
 
 function buildColumns(
+  rows: JobSummary[],
+  selectedIds: Set<string>,
   rerunPendingJobId: string | undefined,
   onOpenJob: (id: string) => void,
   onRerun: (id: string) => void,
+  onDeleteOne: (id: string) => void,
+  onToggleSelect: (id: string) => void,
+  onSelectAll: (allIds: string[]) => void,
 ) {
+  const allVisible = rows.map((r) => r.id);
+  const allSelected =
+    allVisible.length > 0 && allVisible.every((id) => selectedIds.has(id));
+  const someSelected = !allSelected && allVisible.some((id) => selectedIds.has(id));
+
   return [
+    // Selection checkbox — far-left column
+    col.display({
+      id: "select",
+      // Header checkbox selects / deselects all visible rows on this page.
+      header: () => (
+        <Checkbox
+          checked={allSelected ? true : someSelected ? "indeterminate" : false}
+          onCheckedChange={() => onSelectAll(allVisible)}
+          aria-label="Select all jobs on this page"
+          onClick={(e) => e.stopPropagation()}
+        />
+      ),
+      cell: ({ row }) => (
+        <Checkbox
+          checked={selectedIds.has(row.original.id)}
+          onCheckedChange={() => onToggleSelect(row.original.id)}
+          aria-label={`Select job ${row.original.id}`}
+          onClick={(e) => e.stopPropagation()}
+        />
+      ),
+      size: 40,
+    }),
+
     // Status badge
     col.accessor("status", {
       header: "Status",
@@ -182,6 +228,7 @@ function buildColumns(
           isRerunPending={rerunPendingJobId === row.original.id}
           onOpen={onOpenJob}
           onRerun={onRerun}
+          onDelete={onDeleteOne}
         />
       ),
       size: 48,
@@ -230,15 +277,25 @@ export function JobsTable({
   isLoading,
   isRefetching: _isRefetching,
   rerunPendingJobId,
+  selectedIds,
   onResetFilters,
   onOpenJob,
   onRerun,
+  onDeleteOne,
+  onToggleSelect,
+  onSelectAll,
 }: JobsTableProps) {
   // Build column definitions with access to current action callbacks.
-  // Memoisation is not strictly required here because TanStack Table handles
-  // its own internal reconciliation, but stable references help React avoid
-  // unnecessary work on re-renders that do not change filter or action props.
-  const columns = buildColumns(rerunPendingJobId, onOpenJob, onRerun);
+  const columns = buildColumns(
+    rows,
+    selectedIds,
+    rerunPendingJobId,
+    onOpenJob,
+    onRerun,
+    onDeleteOne,
+    onToggleSelect,
+    onSelectAll,
+  );
 
   const table = useReactTable({
     data: rows,
@@ -249,6 +306,9 @@ export function JobsTable({
     // Disable internal pagination: the server controls pages.
     manualPagination: true,
   });
+
+  // The set of column IDs that should stop row-click propagation.
+  const NON_NAVIGABLE_COLUMNS = new Set(["select", "actions"]);
 
   return (
     <Table>
@@ -306,14 +366,15 @@ export function JobsTable({
               // addition to the explicit "Open result" action in the dropdown.
               className="cursor-pointer"
               onClick={() => onOpenJob(row.original.id)}
+              data-selected={selectedIds.has(row.original.id) || undefined}
             >
               {row.getVisibleCells().map((cell) => (
                 <TableCell
                   key={cell.id}
-                  // Stop propagation for the actions column so clicking the
-                  // dropdown does not also trigger the row-click navigation.
+                  // Stop propagation for select and actions columns so clicks
+                  // on checkbox / dropdown do not trigger row navigation.
                   onClick={
-                    cell.column.id === "actions"
+                    NON_NAVIGABLE_COLUMNS.has(cell.column.id)
                       ? (e) => e.stopPropagation()
                       : undefined
                   }
@@ -342,3 +403,4 @@ function formatPipelineLabel(pipelineType: string): string {
 function formatModelLabel(modelArch: string): string {
   return modelArch === "double_unet" ? "Double UNet" : "UNet";
 }
+

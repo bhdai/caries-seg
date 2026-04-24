@@ -13,7 +13,7 @@
  *   Wrap <App> (or the Router root) with <UploadStoreProvider>.
  *   In any descendant component, call `useUploadStore()`.
  */
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
 
 interface UploadStoreValue {
   files: File[];
@@ -21,6 +21,12 @@ interface UploadStoreValue {
   /** ID of the most recently created inference job in this session. */
   lastJobId: string | null;
   setLastJobId: (id: string) => void;
+  /**
+   * Clear all draft state so the next upload starts from a clean slate.
+   * Call this before navigating to `/upload` via an explicit "New Job" CTA
+   * so stale previews and breadcrumb state do not bleed through.
+   */
+  resetDraft: () => void;
 }
 
 const UploadStoreContext = createContext<UploadStoreValue | null>(null);
@@ -28,8 +34,16 @@ const UploadStoreContext = createContext<UploadStoreValue | null>(null);
 export function UploadStoreProvider({ children }: { children: ReactNode }) {
   const [files, setFiles] = useState<File[]>([]);
   const [lastJobId, setLastJobId] = useState<string | null>(null);
+
+  // Clears both files and the last-job breadcrumb reference in one
+  // atomic step so callers do not need to know internal store shape.
+  const resetDraft = useCallback(() => {
+    setFiles([]);
+    setLastJobId(null);
+  }, []);
+
   return (
-    <UploadStoreContext.Provider value={{ files, setFiles, lastJobId, setLastJobId }}>
+    <UploadStoreContext.Provider value={{ files, setFiles, lastJobId, setLastJobId, resetDraft }}>
       {children}
     </UploadStoreContext.Provider>
   );

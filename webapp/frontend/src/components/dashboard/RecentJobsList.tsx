@@ -6,7 +6,7 @@
 // loading, empty, error, and populated states so DashboardPage only needs to
 // pass through query result flags and the job data.
 //
-// Each row shows: status, primary filename, pipeline/model summary, image
+// Each card shows: status, primary filename, pipeline/model summary, image
 // count, relative last-activity time, and two quick-action buttons — "Open"
 // (navigate to result) and "Rerun" (server-side clone via the mutation hook).
 //
@@ -14,14 +14,12 @@
 // are co-located with the trigger, keeping DashboardPage free of mutation
 // wiring.
 
-import { JobStatusChip } from "@/components/jobs/JobStatusChip";
+import { RecentJobCard } from "@/components/dashboard/RecentJobCard";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useRerunJobMutation } from "@/hooks/useRerunJobMutation";
-import { formatRelativeTime } from "@/lib/time";
-import { cn } from "@/lib/utils";
 import type { JobSummary } from "@/api/types";
-import { ExternalLink, RotateCcw, UploadCloud } from "lucide-react";
+import { UploadCloud } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 
 // ---------------------------------------------------------------------------
@@ -42,20 +40,20 @@ interface RecentJobsListProps {
 // ---------------------------------------------------------------------------
 
 /**
- * Render a compact list of recent inference jobs for the Dashboard home page.
+ * Render a card grid of recent inference jobs for the Dashboard home page.
  *
  * States handled:
- *  - Loading  → skeleton placeholder rows.
+ *  - Loading  → skeleton placeholder cards.
  *  - Error    → inline recoverable message; does not flash away existing data.
  *  - Empty    → first-use prompt directing the user to Upload.
- *  - Populated → one compact row per job with open-result and rerun actions.
+ *  - Populated → one card per job with open-result and rerun actions.
  */
 export function RecentJobsList({ jobs, isLoading, isError }: RecentJobsListProps) {
   const navigate = useNavigate();
 
-  // A single mutation instance covers all rows.  `variables` tells us which
+  // A single mutation instance covers all cards.  `variables` tells us which
   // job id triggered the currently-pending rerun so we can highlight only
-  // that row's button.
+  // that card's button.
   const {
     mutate: rerun,
     isPending: isRerunPending,
@@ -63,21 +61,23 @@ export function RecentJobsList({ jobs, isLoading, isError }: RecentJobsListProps
   } = useRerunJobMutation();
 
   // ------------------------------------------------------------------
-  // Loading state — show skeleton rows while the first fetch is live.
+  // Loading state — show skeleton cards while the first fetch is live.
   // ------------------------------------------------------------------
   if (isLoading) {
     return (
-      <div className="divide-y">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {Array.from({ length: 3 }).map((_, i) => (
-          <div key={i} className="flex items-center gap-4 py-4">
-            <Skeleton className="h-5 w-20 shrink-0" />
-            <div className="flex-1 space-y-1.5 min-w-0">
-              <Skeleton className="h-4 w-48" />
-              <Skeleton className="h-3.5 w-32" />
+          <div key={i} className="rounded-lg border p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <Skeleton className="h-5 w-20" />
+              <Skeleton className="h-3.5 w-16" />
             </div>
-            <Skeleton className="h-3.5 w-20 shrink-0" />
-            <Skeleton className="h-8 w-16 shrink-0" />
-            <Skeleton className="h-8 w-16 shrink-0" />
+            <Skeleton className="h-4 w-48" />
+            <Skeleton className="h-3.5 w-32" />
+            <div className="flex gap-2 pt-1">
+              <Skeleton className="h-8 flex-1" />
+              <Skeleton className="h-8 flex-1" />
+            </div>
           </div>
         ))}
       </div>
@@ -85,11 +85,11 @@ export function RecentJobsList({ jobs, isLoading, isError }: RecentJobsListProps
   }
 
   // ------------------------------------------------------------------
-  // Error state — only shown when there are no cached rows to display.
+  // Error state — only shown when there are no cached cards to display.
   //
   // TanStack Query sets `isError` on both initial-load failures and
   // background-refetch failures.  In the refetch case, the previous page
-  // of jobs is still available in `jobs`, so we should keep those rows
+  // of jobs is still available in `jobs`, so we should keep those cards
   // visible and surface the error as a non-destructive inline banner
   // instead of wiping the list.  The "hard error" path below handles the
   // initial-load failure where `jobs` is undefined.
@@ -127,18 +127,17 @@ export function RecentJobsList({ jobs, isLoading, isError }: RecentJobsListProps
   }
 
   // ------------------------------------------------------------------
-  // Populated state — one compact row per job.
+  // Populated state — one card per job.
   //
   // When `isError` is true here, a prior successful fetch populated `jobs`
-  // and a subsequent background refetch failed.  We keep the stale rows
-  // visible and add a non-destructive inline notice above the list so the
-  // user knows the data may be outdated without losing their current view.
+  // and a subsequent background refetch failed.  We keep the stale cards
+  // visible and add a non-destructive inline notice above the grid.
   // ------------------------------------------------------------------
   return (
     <div>
-      {/* Inline refetch-error notice — shown while stale rows are still visible */}
+      {/* Inline refetch-error notice — shown while stale cards are still visible */}
       {isError && (
-        <p className="text-xs text-muted-foreground px-1 pb-2">
+        <p className="text-xs text-muted-foreground px-1 pb-3">
           Could not refresh — showing last known results.{" "}
           <button
             className="underline underline-offset-2 hover:text-foreground"
@@ -149,88 +148,20 @@ export function RecentJobsList({ jobs, isLoading, isError }: RecentJobsListProps
         </p>
       )}
 
-      <div className="divide-y">
-      {jobs.map((job) => {
-        const isThisRerunning = isRerunPending && rerunJobId === job.id;
-
-        return (
-          <div
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {jobs.map((job) => (
+          <RecentJobCard
             key={job.id}
-            className="flex items-center gap-4 py-4 min-w-0"
-          >
-            {/* Status badge */}
-            <JobStatusChip status={job.status} className="shrink-0" />
-
-            {/* Primary filename + pipeline · model · image count summary */}
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate leading-snug">
-                {job.primary_filename}
-              </p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {formatPipelineLabel(job.pipeline_type)}
-                {" · "}
-                {formatModelLabel(job.model_arch)}
-                {" · "}
-                {job.image_count === 1 ? "1 image" : `${job.image_count} images`}
-              </p>
-            </div>
-
-            {/* Relative last-activity timestamp */}
-            <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0">
-              {formatRelativeTime(job.last_activity_at)}
-            </span>
-
-            {/* Quick actions */}
-            <div className="flex items-center gap-1.5 shrink-0">
-              {/* Open result */}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => navigate(`/result/${job.id}`)}
-                aria-label={`Open result for job ${job.id}`}
-              >
-                <ExternalLink className="h-4 w-4 mr-1" />
-                Open
-              </Button>
-
-              {/* Quick rerun */}
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={isRerunPending}
-                onClick={() => rerun(job.id)}
-                aria-label={`Rerun job ${job.id}`}
-              >
-                <RotateCcw
-                  className={cn(
-                    "h-4 w-4 mr-1",
-                    isThisRerunning && "animate-spin",
-                  )}
-                />
-                Rerun
-              </Button>
-            </div>
-          </div>
-        );
-      })}
+            job={job}
+            isRerunPending={isRerunPending}
+            rerunJobId={rerunJobId}
+            onOpen={(jobId) => navigate(`/result/${jobId}`)}
+            onRerun={(jobId) => rerun(jobId)}
+          />
+        ))}
       </div>
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Label helpers
-// ---------------------------------------------------------------------------
 
-// Keep these as module-level functions so they are not recreated on every
-// render and remain easy to unit-test independently.
-
-/** Convert a snake_case pipeline_type value to a readable display label. */
-function formatPipelineLabel(pipelineType: string): string {
-  return pipelineType === "two_stage" ? "Two Stage" : "Single Stage";
-}
-
-/** Convert a snake_case model_arch value to a readable display label. */
-function formatModelLabel(modelArch: string): string {
-  return modelArch === "double_unet" ? "Double UNet" : "UNet";
-}

@@ -306,3 +306,28 @@ async def rerun_job(
         HTTPException 500: Unexpected storage error while copying files.
     """
     return await jobs_service.rerun_job(job_id, db, settings, background_tasks)
+
+
+# ---------------------------------------------------------------------------
+# DELETE /api/jobs/{job_id}
+# ---------------------------------------------------------------------------
+
+
+@router.delete("/{job_id}", status_code=204)
+async def delete_job(
+    job_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> None:
+    """Permanently delete a job and all of its stored files.
+
+    Cascade-deletes associated ``image_result`` rows via the database
+    relationship.  On-disk files are removed on a best-effort basis after the
+    commit; a failure to remove a file does not reverse the database deletion.
+
+    Returns:
+        HTTP 204 No Content on success.
+
+    Raises:
+        HTTPException 404: No job with the given ID exists.
+    """
+    await jobs_service.delete_job(job_id, db)

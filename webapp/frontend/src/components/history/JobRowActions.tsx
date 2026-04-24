@@ -2,19 +2,19 @@
 // JobRowActions
 // =============================================================================
 //
-// Row-level action menu for the History table.  Presents two actions via a
+// Row-level action menu for the History table.  Presents three actions via a
 // compact dropdown:
 //
 //   • Open result  — navigate to /result/:jobId
 //   • Rerun        — trigger the server-side rerun mutation
+//   • Delete       — permanently remove the job (with confirmation dialog)
 //
 // The dropdown pattern keeps the table rows visually clean: a single "…"
-// trigger replaces two inline buttons that would otherwise crowd narrow
+// trigger replaces multiple inline buttons that would otherwise crowd narrow
 // viewport widths or multi-image rows.
 //
-// The rerun mutation is invoked here so the loading state (spinning icon) can
-// be tied directly to the trigger button without threading mutation state
-// through the full table hierarchy.
+// The delete confirmation uses an AlertDialog so the destructive action
+// cannot be triggered by an accidental single click.
 
 import {
   DropdownMenu,
@@ -23,8 +23,19 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { ExternalLink, MoreHorizontal, RotateCcw } from "lucide-react";
+import { ExternalLink, MoreHorizontal, RotateCcw, Trash2 } from "lucide-react";
+import { useState } from "react";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -42,6 +53,9 @@ interface JobRowActionsProps {
 
   /** Called when the user selects "Rerun". */
   onRerun: (jobId: string) => void;
+
+  /** Called when the user confirms deletion. */
+  onDelete: (jobId: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -51,51 +65,102 @@ interface JobRowActionsProps {
 /**
  * Render a "⋯" dropdown button with row-level actions for a single history
  * table row.  Keeps the trigger accessible via keyboard and screen reader.
+ *
+ * The AlertDialog for deletion confirmation is co-located here so all the
+ * state related to a single-row destructive action stays in one file.
  */
 export function JobRowActions({
   jobId,
   isRerunPending,
   onOpen,
   onRerun,
+  onDelete,
 }: JobRowActionsProps) {
+  // Controls the delete confirmation dialog independently of the dropdown so
+  // the dialog stays open even after the dropdown closes.
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8"
-          aria-label={`Actions for job ${jobId}`}
-          // Prevent clicks from propagating to a potential row-click handler
-          // so the dropdown stays the sole interaction target.
-          onClick={(e) => e.stopPropagation()}
-        >
-          <MoreHorizontal className="h-4 w-4" />
-        </Button>
-      </DropdownMenuTrigger>
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            aria-label={`Actions for job ${jobId}`}
+            // Prevent clicks from propagating to the row-click handler so the
+            // dropdown stays the sole interaction target.
+            onClick={(e) => e.stopPropagation()}
+          >
+            <MoreHorizontal className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
 
-      <DropdownMenuContent align="end" className="w-40">
-        {/* Open result detail */}
-        <DropdownMenuItem
-          onSelect={() => onOpen(jobId)}
-        >
-          <ExternalLink className="mr-2 h-4 w-4" />
-          Open result
-        </DropdownMenuItem>
+        <DropdownMenuContent align="end" className="w-40">
+          {/* Open result detail */}
+          <DropdownMenuItem onSelect={() => onOpen(jobId)}>
+            <ExternalLink className="mr-2 h-4 w-4" />
+            Open result
+          </DropdownMenuItem>
 
-        <DropdownMenuSeparator />
+          <DropdownMenuSeparator />
 
-        {/* Server-side rerun */}
-        <DropdownMenuItem
-          disabled={isRerunPending}
-          onSelect={() => onRerun(jobId)}
-        >
-          <RotateCcw
-            className={`mr-2 h-4 w-4${isRerunPending ? " animate-spin" : ""}`}
-          />
-          Rerun
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+          {/* Server-side rerun */}
+          <DropdownMenuItem
+            disabled={isRerunPending}
+            onSelect={() => onRerun(jobId)}
+          >
+            <RotateCcw
+              className={`mr-2 h-4 w-4${isRerunPending ? " animate-spin" : ""}`}
+            />
+            Rerun
+          </DropdownMenuItem>
+
+          <DropdownMenuSeparator />
+
+          {/* Delete — opens confirmation dialog; does not delete immediately */}
+          <DropdownMenuItem
+            className="text-destructive focus:text-destructive"
+            onSelect={(e) => {
+              // Prevent the dropdown from stealing focus before the dialog mounts.
+              e.preventDefault();
+              setDeleteDialogOpen(true);
+            }}
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Delete confirmation dialog                                          */}
+      {/* ------------------------------------------------------------------ */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent onClick={(e) => e.stopPropagation()}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete job?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove the job and all its result files.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                setDeleteDialogOpen(false);
+                onDelete(jobId);
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
+
