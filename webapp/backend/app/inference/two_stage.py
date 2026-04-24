@@ -74,12 +74,18 @@ def run_two_stage(
     img = load_image(upload_path)
     h, w = img.shape[:2]
     result_id = uuid.UUID(str(image_result.id))
+    device = settings.resolved_device
 
     display_path = save_display_copy(img=img, image_result_id=result_id, settings=settings)
 
     # YOLO expects a uint8 BGR array (same format OpenCV produces).
     img_uint8 = (img * 255).clip(0, 255).astype(np.uint8)
-    yolo_results = yolo.predict(img_uint8, conf=0.25, verbose=False)
+    yolo_results = yolo.predict(
+        img_uint8,
+        conf=0.25,
+        device=device,
+        verbose=False,
+    )
 
     # Parse detections into BBox objects.  The YOLO Results object stores
     # coordinates in xyxy format with shape (N, 4) and confidences with
@@ -140,7 +146,7 @@ def run_two_stage(
         crop_w = px2 - px1
 
         # 256×256 is the training resolution for two-stage checkpoints.
-        tensor = prepare_tensor(crop, target_h=256, target_w=256, device=settings.DEVICE)
+        tensor = prepare_tensor(crop, target_h=256, target_w=256, device=device)
 
         with torch.no_grad():
             output = seg_model({"images": tensor})

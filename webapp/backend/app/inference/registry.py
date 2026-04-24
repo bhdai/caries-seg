@@ -89,6 +89,14 @@ class ModelRegistry:
         missing so the app starts with a partial model set.  Each model
         is placed in ``eval()`` mode and moved to the configured device.
         """
+        resolved_device = self._settings.resolved_device
+        logger.info(
+            "Initialising inference registry on device=%s (requested=%s, cuda_available=%s)",
+            resolved_device,
+            self._settings.DEVICE,
+            torch.cuda.is_available(),
+        )
+
         for (pipeline_type, model_arch), (dir_name, model_class) in _CHECKPOINT_MAP.items():
             ckpt_path = self._settings.MODEL_ROOT / dir_name / "checkpoint.pth"
             key = f"{pipeline_type}/{model_arch}"
@@ -112,14 +120,19 @@ class ModelRegistry:
                     model = model_class()
                 state_dict = torch.load(
                     ckpt_path,
-                    map_location=self._settings.DEVICE,
+                    map_location=resolved_device,
                     weights_only=True,
                 )
                 model.load_state_dict(state_dict)
                 model.eval()
-                model.to(self._settings.DEVICE)
+                model.to(resolved_device)
                 self._models[key] = model
-                logger.info("Loaded model %s from %s", key, ckpt_path)
+                logger.info(
+                    "Loaded model %s from %s on %s",
+                    key,
+                    ckpt_path,
+                    resolved_device,
+                )
             except Exception:
                 logger.warning(
                     "Failed to load model %s from %s",
