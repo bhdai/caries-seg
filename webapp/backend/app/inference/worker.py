@@ -33,6 +33,7 @@ from app.inference.single_stage import run_single_stage
 from app.inference.two_stage import run_two_stage
 from app.models.image_result import ImageResult
 from app.models.job import Job, JobStatus
+from app.services.jobs import touch_job_activity
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +69,10 @@ async def run_inference(
                 return
 
             job.status = JobStatus.processing
+            # Explicitly record the processing-start timestamp so dashboard
+            # labels show activity from the moment inference begins, not just
+            # when the job was created.
+            touch_job_activity(job)
             await session.commit()
 
             # Load all image results for this job.  We access them after the
@@ -119,12 +124,17 @@ async def run_inference(
                     if output.bounding_boxes is not None
                     else None
                 )
+                # Touch the job activity timestamp after each image so the
+                # dashboard "last activity" label advances as inference
+                # progresses, not only at job-level state transitions.
+                touch_job_activity(job)
                 await session.commit()
 
             # ------------------------------------------------------------------
             # All images processed successfully — mark the job completed.
             # ------------------------------------------------------------------
             job.status = JobStatus.completed
+            touch_job_activity(job)
             await session.commit()
             logger.info("Job %s completed successfully", job_id)
 
@@ -143,6 +153,7 @@ async def run_inference(
                 if job is not None:
                     job.status = JobStatus.failed
                     job.error_message = error_summary
+                    touch_job_activity(job)
                     await session.commit()
             except Exception:
                 logger.exception(
