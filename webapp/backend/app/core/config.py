@@ -8,7 +8,7 @@ startup error rather than a cryptic ``KeyError`` at call time.
 
 from __future__ import annotations
 
-from functools import lru_cache
+from functools import cached_property, lru_cache
 from pathlib import Path
 
 from pydantic import field_validator
@@ -47,9 +47,9 @@ class Settings(BaseSettings):
     # browser canvas responsive for very high-resolution panoramics.
     MAX_DISPLAY_PX: int = 1600
 
-    # PyTorch device string.  Defaults to "cpu"; override to "cuda" if
-    # the host has an NVIDIA GPU and the Docker NVIDIA runtime is active.
-    DEVICE: str = "cpu"
+    # PyTorch device selection.  "auto" prefers CUDA when available and
+    # falls back to CPU otherwise.
+    DEVICE: str = "auto"
 
     # ------------------------------------------------------------------
     # Validators
@@ -57,7 +57,9 @@ class Settings(BaseSettings):
     @field_validator("DEVICE")
     @classmethod
     def _validate_device(cls, v: str) -> str:
-        assert v in {"cpu", "cuda"}, f"DEVICE must be 'cpu' or 'cuda', got {v!r}"
+        assert v in {"auto", "cpu", "cuda"}, (
+            f"DEVICE must be 'auto', 'cpu', or 'cuda', got {v!r}"
+        )
         return v
 
     @field_validator("MAX_DISPLAY_PX")
@@ -65,6 +67,29 @@ class Settings(BaseSettings):
     def _validate_max_display_px(cls, v: int) -> int:
         assert v > 0, "MAX_DISPLAY_PX must be a positive integer"
         return v
+
+    @cached_property
+    def resolved_device(self) -> str:
+        """Resolve the effective inference device for this process.
+
+        ``DEVICE=auto`` prefers CUDA when a CUDA-capable Torch runtime is
+        available.  ``DEVICE=cuda`` fails fast when CUDA is unavailable so the
+        process does not silently fall back to CPU and surprise operators.
+        """
+        if self.DEVICE == "cpu":
+            return "cpu"
+
+        import torch
+
+        cuda_available = torch.cuda.is_available()
+        if self.DEVICE == "auto":
+            return "cuda" if cuda_available else "cpu"
+
+        assert cuda_available, (
+            "DEVICE='cuda' requires a CUDA-enabled Torch build and an "
+            "available GPU"
+        )
+        return "cuda"
 
 
 @lru_cache

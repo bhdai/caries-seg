@@ -137,6 +137,55 @@ def test_prepare_tensor_values_in_range() -> None:
 
 
 # ==============================================================================
+# core.config.Settings device resolution
+# ==============================================================================
+
+
+def test_settings_auto_resolves_to_cpu_when_cuda_is_unavailable(tmp_path: Path) -> None:
+    """Auto device selection falls back to CPU when CUDA is unavailable."""
+    from app.core.config import Settings
+
+    settings = Settings(
+        DATABASE_URL="postgresql+asyncpg://u:p@localhost/db",
+        STORAGE_ROOT=tmp_path / "storage",
+        MODEL_ROOT=tmp_path / "models",
+    )
+
+    with patch("torch.cuda.is_available", return_value=False):
+        assert settings.resolved_device == "cpu"
+
+
+def test_settings_auto_resolves_to_cuda_when_available(tmp_path: Path) -> None:
+    """Auto device selection prefers CUDA when Torch reports a GPU."""
+    from app.core.config import Settings
+
+    settings = Settings(
+        DATABASE_URL="postgresql+asyncpg://u:p@localhost/db",
+        STORAGE_ROOT=tmp_path / "storage",
+        MODEL_ROOT=tmp_path / "models",
+    )
+
+    with patch("torch.cuda.is_available", return_value=True):
+        assert settings.resolved_device == "cuda"
+
+
+def test_settings_explicit_cuda_requires_available_gpu(tmp_path: Path) -> None:
+    """Explicit CUDA selection fails fast instead of silently using CPU."""
+    from app.core.config import Settings
+
+    settings = Settings(
+        DATABASE_URL="postgresql+asyncpg://u:p@localhost/db",
+        STORAGE_ROOT=tmp_path / "storage",
+        MODEL_ROOT=tmp_path / "models",
+        DEVICE="cuda",
+    )
+
+    with patch("torch.cuda.is_available", return_value=False):
+        with pytest.raises(AssertionError, match="DEVICE='cuda'"):
+            _ = settings.resolved_device
+
+
+# ==============================================================================
 # preprocessing.tensor_to_mask
 # ==============================================================================
 
@@ -284,6 +333,8 @@ def test_two_stage_zero_detections(tmp_path: Path) -> None:
 
     assert output.bounding_boxes == []
     assert output.mask_path.exists()
+    yolo_stub.predict.assert_called_once()
+    assert yolo_stub.predict.call_args.kwargs["device"] == "cpu"
 
     import cv2
     saved_mask = cv2.imread(str(output.mask_path), cv2.IMREAD_GRAYSCALE)

@@ -1,7 +1,5 @@
 ## Deferred Notes
 
-- After Phase 5 is complete, apply a shadcn/ui theme preset from https://ui.shadcn.com/themes as a dedicated design pass; it is a pure CSS-variable change to `webapp/frontend/src/index.css` and can be done in minutes without touching component code.
-
 - The extracted benchmark paper description does not fully match the shipped reference repo code: loss, augmentation, batch-size, and checkpoint-selection details appear to differ and should be reconciled before treating the paper numbers as a strict reproduction target.
 - The local training workflow loads the test split but only reports validation metrics; add a dedicated local test evaluation entrypoint so benchmark comparisons do not rely on validation logs.
 - The current random validation split appears harder and more heterogeneous than the official test split based on lesion-coverage statistics, so validation F1 is likely pessimistic relative to held-out test performance.
@@ -20,3 +18,4 @@
 - The new `GET /api/jobs` search query interpolates raw user text into an `ILIKE '%...%'` pattern without escaping `%` or `_`, so literal underscores and percent signs in filenames behave as SQL wildcards and can return false-positive matches.
 - The new rerun path copies uploads/display images to disk before the transaction commits, but it does not clean those files up if a later copy/decode/write step fails; a rerun error can therefore leave orphaned files under the new job namespace.
 - No automated frontend tests exist for the Phase 3/4 dashboard and history surfaces (DashboardPage, HistoryPage, RecentJobsList, JobsTable, JobsPagination, HistoryFilters). The only current frontend tests are `config-page.test.tsx` and `upload-page.test.tsx`. Add component tests for the new surfaces as part of Phase 5 to catch regressions like the stale-data-on-error bug fixed in this session.
+- The backend dependency metadata still pins Torch/Torchvision to the CPU-only PyTorch index in `webapp/backend/pyproject.toml` and `webapp/backend/uv.lock`, but the local backend virtualenv currently contains a CUDA build; a future `uv sync` can therefore silently change local inference performance by reinstalling CPU wheels.

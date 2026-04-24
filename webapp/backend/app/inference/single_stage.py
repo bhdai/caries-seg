@@ -82,6 +82,7 @@ def run_single_stage(
     upload_path = Path(image_result.upload_path)
     img = load_image(upload_path)
     h, w = img.shape[:2]
+    device = settings.resolved_device
 
     # Save the display-sized copy so the file-serving endpoint has a
     # browser-ready PNG regardless of the original image dimensions.
@@ -93,7 +94,7 @@ def run_single_stage(
 
     # Resize and batch for the model input; 384×384 is the training resolution
     # for single-stage checkpoints.
-    tensor = prepare_tensor(img, target_h=384, target_w=384, device=settings.DEVICE)
+    tensor = prepare_tensor(img, target_h=384, target_w=384, device=device)
 
     t_start = time.monotonic()
     with torch.no_grad():
