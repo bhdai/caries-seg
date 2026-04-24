@@ -85,10 +85,16 @@ export function RecentJobsList({ jobs, isLoading, isError }: RecentJobsListProps
   }
 
   // ------------------------------------------------------------------
-  // Error state — show a recoverable inline message without clearing any
-  // previously visible data (though in this branch data is undefined).
+  // Error state — only shown when there are no cached rows to display.
+  //
+  // TanStack Query sets `isError` on both initial-load failures and
+  // background-refetch failures.  In the refetch case, the previous page
+  // of jobs is still available in `jobs`, so we should keep those rows
+  // visible and surface the error as a non-destructive inline banner
+  // instead of wiping the list.  The "hard error" path below handles the
+  // initial-load failure where `jobs` is undefined.
   // ------------------------------------------------------------------
-  if (isError) {
+  if (isError && (!jobs || jobs.length === 0)) {
     return (
       <div className="py-6 text-center text-sm text-muted-foreground">
         Could not load recent jobs.{" "}
@@ -122,9 +128,28 @@ export function RecentJobsList({ jobs, isLoading, isError }: RecentJobsListProps
 
   // ------------------------------------------------------------------
   // Populated state — one compact row per job.
+  //
+  // When `isError` is true here, a prior successful fetch populated `jobs`
+  // and a subsequent background refetch failed.  We keep the stale rows
+  // visible and add a non-destructive inline notice above the list so the
+  // user knows the data may be outdated without losing their current view.
   // ------------------------------------------------------------------
   return (
-    <div className="divide-y">
+    <div>
+      {/* Inline refetch-error notice — shown while stale rows are still visible */}
+      {isError && (
+        <p className="text-xs text-muted-foreground px-1 pb-2">
+          Could not refresh — showing last known results.{" "}
+          <button
+            className="underline underline-offset-2 hover:text-foreground"
+            onClick={() => window.location.reload()}
+          >
+            Reload
+          </button>
+        </p>
+      )}
+
+      <div className="divide-y">
       {jobs.map((job) => {
         const isThisRerunning = isRerunPending && rerunJobId === job.id;
 
@@ -188,6 +213,7 @@ export function RecentJobsList({ jobs, isLoading, isError }: RecentJobsListProps
           </div>
         );
       })}
+      </div>
     </div>
   );
 }
