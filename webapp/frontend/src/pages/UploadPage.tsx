@@ -11,7 +11,7 @@
  *
  * File constraints:
  *   - MIME: image/jpeg, image/png
- *   - Size: < 20 MB per file
+ *   - Size: < 10 MB per file
  */
 import { ImageThumbnail } from "@/components/ImageThumbnail";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -23,7 +23,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { type FileRejection, useDropzone } from "react-dropzone";
 import { useNavigate } from "react-router-dom";
 
-const MAX_SIZE_BYTES = 20 * 1024 * 1024; // 20 MB
+const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 const ACCEPTED_MIME = { "image/jpeg": [], "image/png": [] };
 
 interface Preview {
@@ -57,7 +57,7 @@ export default function UploadPage() {
       for (const { file, errors: errs } of rejected) {
         for (const err of errs) {
           if (err.code === "file-too-large") {
-            newErrors.push(`"${file.name}" exceeds 20 MB.`);
+            newErrors.push(`"${file.name}" exceeds 10 MB.`);
           } else if (err.code === "file-invalid-type") {
             newErrors.push(`"${file.name}" is not a JPEG or PNG.`);
           } else {
@@ -142,7 +142,7 @@ export default function UploadPage() {
                     Click or drag files here
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    JPEG or PNG · max 20 MB each
+                    JPEG or PNG · max 10 MB each
                   </p>
                 </>
               )}

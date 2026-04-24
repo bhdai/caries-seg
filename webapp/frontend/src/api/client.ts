@@ -29,7 +29,7 @@ export interface JobResponse {
   id: string;
   status: "pending" | "processing" | "completed" | "failed";
   pipeline_type: "single_stage" | "two_stage";
-  model_arch: "unet" | "double_unet" | "attention_unet";
+  model_arch: "unet" | "double_unet";
   error_message: string | null;
   created_at: string;
   image_results: ImageResultResponse[];
@@ -85,7 +85,7 @@ async function checkResponse(res: Response): Promise<Response> {
 export async function createJob(
   files: File[],
   pipelineType: "single_stage" | "two_stage",
-  modelArch: "unet" | "double_unet" | "attention_unet",
+  modelArch: "unet" | "double_unet",
 ): Promise<JobResponse> {
   const form = new FormData();
   for (const file of files) {

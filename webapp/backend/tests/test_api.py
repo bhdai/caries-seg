@@ -134,6 +134,22 @@ async def test_create_job_invalid_pipeline_type(client: AsyncClient) -> None:
     assert response.status_code == 422
 
 
+async def test_create_job_rejects_attention_unet(client: AsyncClient) -> None:
+    """attention_unet is not a supported model_arch and must be rejected with 422.
+
+    This test guards the contract cleanup from Phase 0: the frontend no longer
+    offers AttentionUNet as a selectable option, and the backend enforces the
+    same restriction at the API boundary so any stale client cannot submit it.
+    """
+    png_bytes = _make_png_bytes()
+    response = await client.post(
+        "/api/jobs",
+        data={"pipeline_type": "single_stage", "model_arch": "attention_unet"},
+        files=[("files", ("xray.png", png_bytes, "image/png"))],
+    )
+    assert response.status_code == 422
+
+
 async def test_create_job_rejects_path_like_filename(client: AsyncClient) -> None:
     """Path-like filenames are rejected instead of escaping the job directory."""
     png_bytes = _make_png_bytes()
