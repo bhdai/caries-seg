@@ -7,7 +7,7 @@
  *
  * Colour: #00e5ff (cyan) — legible on dark dental radiographs.
  */
-import type { BBoxResponse } from "@/api/client";
+import type { BBoxResponse } from "@/api/types";
 
 /**
  * Draw all bounding boxes onto `ctx`.

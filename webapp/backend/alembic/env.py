@@ -2,12 +2,45 @@ from __future__ import annotations
 
 import asyncio
 import os
+import sys
 from logging.config import fileConfig
+from pathlib import Path
 
+from dotenv import load_dotenv
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy import pool
 
 from alembic import context
+
+# ---------------------------------------------------------------------------
+# Local development bootstrap
+#
+# When running `uv run alembic` from webapp/backend/, two things need to be
+# true before any app code is imported:
+#
+#  1. .env must be loaded so DATABASE_URL (and friends) are in os.environ.
+#     Pydantic-Settings reads .env automatically when the FastAPI app boots,
+#     but Alembic runs as a standalone script and never touches Settings, so
+#     we load it here explicitly.  In Docker the variables arrive via the
+#     compose env_file directive and load_dotenv() is a no-op.
+#
+#  2. The monorepo src/ package (model definitions shared between the ML
+#     pipeline and the backend) lives at the repo root, one level above
+#     webapp/backend/.  Alembic imports app.models which in turn imports
+#     src.models, so the repo root must be on sys.path.
+# ---------------------------------------------------------------------------
+
+# Path to webapp/backend/ (where alembic.ini and this file live).
+_BACKEND_DIR = Path(__file__).resolve().parent.parent
+# Path to the monorepo root (contains src/).
+_REPO_ROOT = _BACKEND_DIR.parent.parent
+
+# Load .env from webapp/backend/.env if it exists; silently skip otherwise.
+load_dotenv(_BACKEND_DIR / ".env")
+
+# Make `import src` work when running from webapp/backend/.
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
 # Alembic Config object — access to values in alembic.ini.
 config = context.config

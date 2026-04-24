@@ -2,17 +2,17 @@
  * ResultPage — Step 3 of the inference workflow.
  *
  * Behaviour:
- *   - On mount: fetches GET /api/jobs/:id.
- *   - While status is "pending" or "processing": polls every 2 s.
+ *   - On mount: fetches GET /api/jobs/:id via the shared useJobDetailQuery hook.
+ *   - While status is "pending" or "processing": the hook polls every 2 s
+ *     automatically and stops when the job reaches a terminal state.
  *   - On "completed": renders one OverlayCanvas per image result plus a
  *     shared OpacitySlider.
  *   - On "failed": renders the error_message in a destructive Alert.
  *
  * The shared opacity state (0–100, default 60) is passed to every canvas
- *  so all overlays update together when the slider is moved.
+ * so all overlays update together when the slider is moved.
  */
-import { getJob, type JobResponse } from "@/api/client";
-import { JobStatusBadge } from "@/components/JobStatusBadge";
+import { JobStatusChip } from "@/components/jobs/JobStatusChip";
 import { OpacitySlider } from "@/components/OpacitySlider";
 import { OverlayCanvas } from "@/components/OverlayCanvas";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -20,74 +20,21 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { useEffect, useRef, useState } from "react";
+import { useJobDetailQuery } from "@/hooks/useJobDetailQuery";
+import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-
-const POLL_INTERVAL_MS = 2000;
 
 export default function ResultPage() {
   const { jobId } = useParams<{ jobId: string }>();
   const navigate = useNavigate();
 
-  const [job, setJob] = useState<JobResponse | null>(null);
-  const [fetchError, setFetchError] = useState<string | null>(null);
+  const { data: job, error } = useJobDetailQuery(jobId);
+
+  const fetchError =
+    error instanceof Error ? error.message : error ? "Failed to fetch job." : null;
+
   const [opacity, setOpacity] = useState(60);
   const [showBoundingBoxes, setShowBoundingBoxes] = useState(true);
-
-  // Store interval id in a ref so cleanup is always precise.
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  function stopPolling() {
-    if (intervalRef.current !== null) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-  }
-
-  useEffect(() => {
-    if (!jobId) return;
-
-    let cancelled = false;
-
-    async function fetchJob() {
-      try {
-        const data = await getJob(jobId!);
-        if (cancelled) return;
-        setJob(data);
-
-        if (data.status === "completed" || data.status === "failed") {
-          stopPolling();
-        }
-      } catch (err) {
-        if (cancelled) return;
-        setFetchError(err instanceof Error ? err.message : "Failed to fetch job.");
-        stopPolling();
-      }
-    }
-
-    // Fetch immediately, then start polling if not already terminal.
-    void fetchJob().then(() => {
-      if (cancelled) return;
-      setJob((current) => {
-        if (
-          current &&
-          current.status !== "completed" &&
-          current.status !== "failed"
-        ) {
-          intervalRef.current = setInterval(() => {
-            void fetchJob();
-          }, POLL_INTERVAL_MS);
-        }
-        return current;
-      });
-    });
-
-    return () => {
-      cancelled = true;
-      stopPolling();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jobId]);
 
   const PIPELINE_LABELS: Record<string, string> = {
     single_stage: "Single Stage",
@@ -100,26 +47,25 @@ export default function ResultPage() {
   const showBoundingBoxToggle = job?.pipeline_type === "two_stage";
 
   return (
-    <div className="min-h-screen bg-background px-4 py-12">
-      <div className="max-w-4xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Results</h1>
-            {job && (
-              <p className="text-muted-foreground mt-1 text-sm">
-                {PIPELINE_LABELS[job.pipeline_type] ?? job.pipeline_type} ·{" "}
-                {ARCH_LABELS[job.model_arch] ?? job.model_arch}
-              </p>
-            )}
-          </div>
-          <div className="flex items-center gap-3">
-            {job && <JobStatusBadge status={job.status} />}
-            <Button variant="outline" size="sm" onClick={() => navigate("/")}>
-              New Job
-            </Button>
-          </div>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Results</h1>
+          {job && (
+            <p className="text-muted-foreground mt-1 text-sm">
+              {PIPELINE_LABELS[job.pipeline_type] ?? job.pipeline_type} ·{" "}
+              {ARCH_LABELS[job.model_arch] ?? job.model_arch}
+            </p>
+          )}
         </div>
+        <div className="flex items-center gap-3">
+          {job && <JobStatusChip status={job.status} />}
+          <Button variant="outline" size="sm" onClick={() => navigate("/upload")}>
+            New Job
+          </Button>
+        </div>
+      </div>
 
         {/* Fetch error */}
         {fetchError && (
@@ -210,7 +156,6 @@ export default function ResultPage() {
             </div>
           </>
         )}
-      </div>
     </div>
   );
 }
