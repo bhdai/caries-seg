@@ -12,11 +12,32 @@
  *
  * The canvas is redrawn whenever `opacity` changes; images are reused from
  * the HTMLImageElement cache — no extra network requests.
+ *
+ * An imperative `OverlayCanvasHandle` ref may be forwarded to the component
+ * to obtain a PNG export of exactly what the user currently sees.
  */
 import { fileUrl } from "@/api/files";
 import type { BBoxResponse } from "@/api/types";
 import * as BBoxLayer from "@/components/BBoxLayer";
-import { useEffect, useRef } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
+
+// =============================================================================
+// Public imperative handle
+// =============================================================================
+
+/**
+ * Provide an imperative export surface for the already-rendered overlay
+ * canvas so the result page can save exactly what the user sees without
+ * reimplementing rendering logic elsewhere.
+ */
+export interface OverlayCanvasHandle {
+  /**
+   * Return a Blob containing the current canvas contents encoded as PNG.
+   * Rejects if the canvas has not yet rendered or if the browser disallows
+   * the export due to a tainted canvas (cross-origin image policy).
+   */
+  exportPngBlob(): Promise<Blob>;
+}
 
 export interface OverlayCanvasProps {
   /** ID of the ImageResult record (used to build API URLs). */
@@ -58,13 +79,17 @@ function createWorkingCanvas(
   return canvas;
 }
 
-export function OverlayCanvas({
-  imageResultId,
-  opacity,
-  boundingBoxes,
-  showBoundingBoxes = true,
-  originalSize,
-}: OverlayCanvasProps) {
+export const OverlayCanvas = forwardRef<OverlayCanvasHandle, OverlayCanvasProps>(
+  function OverlayCanvas(
+    {
+      imageResultId,
+      opacity,
+      boundingBoxes,
+      showBoundingBoxes = true,
+      originalSize,
+    }: OverlayCanvasProps,
+    ref,
+  ) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   // Cache the loaded HTMLImageElement objects across re-renders so that
@@ -72,6 +97,27 @@ export function OverlayCanvas({
   const originalImgRef = useRef<HTMLImageElement | null>(null);
   const maskImgRef = useRef<HTMLImageElement | null>(null);
   const loadedForIdRef = useRef<string | null>(null);
+
+  // Expose the export handle.  The returned Blob captures the canvas at
+  // its current rendered state (opacity, bounding boxes, visible now).
+  useImperativeHandle(ref, () => ({
+    exportPngBlob(): Promise<Blob> {
+      return new Promise((resolve, reject) => {
+        const canvas = canvasRef.current;
+        if (!canvas) {
+          reject(new Error("Canvas is not mounted."));
+          return;
+        }
+        canvas.toBlob((blob) => {
+          if (blob) {
+            resolve(blob);
+          } else {
+            reject(new Error("Canvas toBlob produced no data."));
+          }
+        }, "image/png");
+      });
+    },
+  }));
 
   useEffect(() => {
     let cancelled = false;
@@ -170,4 +216,4 @@ export function OverlayCanvas({
       style={{ aspectRatio }}
     />
   );
-}
+});

@@ -14,15 +14,20 @@
 //     the shared opacity level.
 //
 // The `selectionMode` and `isSelected` props wire into the Phase 3 download
-// UX but are already surfaced here so the card layout is ready without a
-// second structural change.  When `selectionMode` is false, the selection
-// affordance is hidden and the card behaves exactly as it did before.
+// UX.  When `selectionMode` is false, the selection affordance is hidden and
+// the card behaves exactly as it did before.
+//
+// A forwarded ref of type `OverlayCanvasHandle` is exposed so the parent
+// page can call `exportPngBlob()` to capture the current canvas state for
+// single-image or batch ZIP export.
 
-import { OverlayCanvas } from "@/components/OverlayCanvas";
+import { OverlayCanvas, type OverlayCanvasHandle } from "@/components/OverlayCanvas";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import type { BBoxResponse, ImageResultResponse } from "@/api/types";
+import { forwardRef } from "react";
+import { Download } from "lucide-react";
 
 export interface ResultImageCardProps {
   result: ImageResultResponse;
@@ -41,23 +46,37 @@ export interface ResultImageCardProps {
   isSelected: boolean;
   /** Called with the image result id when the user toggles selection. */
   onToggleSelected: (imageResultId: string) => void;
+  /**
+   * Called when the user requests a single-image PNG download.
+   * The page layer handles the actual export so it can surface feedback.
+   */
+  onDownloadOne: (imageResultId: string) => Promise<void>;
 }
 
 /**
  * Render one completed image result card.
  *
+ * A forwarded `OverlayCanvasHandle` ref exposes `exportPngBlob()` so the
+ * parent page can capture the current overlay state for download without
+ * re-implementing canvas rendering logic.
+ *
  * The component is deliberately free of placeholder-state logic; all
  * not-ready paths are handled by `ResultImagePlaceholderCard`.
  */
-export function ResultImageCard({
-  result,
-  jobId: _jobId,
-  opacity,
-  showBoundingBoxes,
-  selectionMode,
-  isSelected,
-  onToggleSelected,
-}: ResultImageCardProps) {
+export const ResultImageCard = forwardRef<OverlayCanvasHandle, ResultImageCardProps>(
+  function ResultImageCard(
+    {
+      result,
+      jobId: _jobId,
+      opacity,
+      showBoundingBoxes,
+      selectionMode,
+      isSelected,
+      onToggleSelected,
+      onDownloadOne,
+    },
+    ref,
+  ) {
   // Build a human-readable metadata string for the card subtitle.
   // Each segment is added only when the relevant data is present so the
   // string doesn't show stray "·" separators for missing fields.
@@ -100,9 +119,19 @@ export function ResultImageCard({
             <span className="truncate">{result.original_filename}</span>
           </span>
 
-          {/* Right side: metadata string */}
-          <span className="shrink-0 text-xs font-normal text-muted-foreground">
-            {metaParts.join(" · ")}
+          {/* Right side: metadata string + single-image download icon button */}
+          <span className="flex shrink-0 items-center gap-2">
+            <span className="text-xs font-normal text-muted-foreground">
+              {metaParts.join(" · ")}
+            </span>
+            <button
+              type="button"
+              onClick={() => void onDownloadOne(result.id)}
+              className="rounded p-1 text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              aria-label={`Download ${result.original_filename}`}
+            >
+              <Download className="h-4 w-4" aria-hidden="true" />
+            </button>
           </span>
         </CardTitle>
 
@@ -116,6 +145,7 @@ export function ResultImageCard({
 
       <CardContent className="pt-0">
         <OverlayCanvas
+          ref={ref}
           imageResultId={result.id}
           opacity={opacity}
           boundingBoxes={canvasBboxes}
@@ -125,4 +155,5 @@ export function ResultImageCard({
       </CardContent>
     </Card>
   );
-}
+});
+
