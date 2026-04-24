@@ -32,7 +32,7 @@ interface Preview {
 }
 
 export default function UploadPage() {
-  const { setFiles } = useUploadStore();
+  const { files, setFiles } = useUploadStore();
   const navigate = useNavigate();
 
   const [previews, setPreviews] = useState<Preview[]>([]);
@@ -40,6 +40,23 @@ export default function UploadPage() {
 
   // Keep a ref to all object URLs created so we can revoke them on unmount.
   const objectUrlsRef = useRef<string[]>([]);
+
+  // Hydrate the preview list from the store when the user navigates back
+  // to this route.  The store still holds the previously selected File
+  // objects, but local preview state starts empty on remount.  We create
+  // new object URLs here once, on mount only, so the thumbnails reappear.
+  useEffect(() => {
+    if (files.length === 0) return;
+    const hydrated: Preview[] = files.map((file) => {
+      const objectUrl = URL.createObjectURL(file);
+      objectUrlsRef.current.push(objectUrl);
+      return { file, objectUrl };
+    });
+    setPreviews(hydrated);
+    // Intentionally runs once on mount; we do not re-sync on every files
+    // change because local preview edits (remove) should not be overwritten.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -112,14 +129,13 @@ export default function UploadPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-background px-4 py-12">
-      <div className="w-full max-w-2xl space-y-6">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Upload X-rays</h1>
-          <p className="text-muted-foreground mt-1">
-            Drag and drop one or more panoramic dental radiographs to begin.
-          </p>
-        </div>
+    <div className="max-w-2xl mx-auto space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Upload X-rays</h1>
+        <p className="text-muted-foreground mt-1">
+          Drag and drop one or more panoramic dental radiographs to begin.
+        </p>
+      </div>
 
         {/* Drop zone */}
         <Card>
@@ -191,7 +207,6 @@ export default function UploadPage() {
             Continue
           </Button>
         </div>
-      </div>
     </div>
   );
 }

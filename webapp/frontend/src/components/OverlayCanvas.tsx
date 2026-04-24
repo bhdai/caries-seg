@@ -13,7 +13,8 @@
  * The canvas is redrawn whenever `opacity` changes; images are reused from
  * the HTMLImageElement cache — no extra network requests.
  */
-import { fileUrl, type BBoxResponse } from "@/api/client";
+import { fileUrl } from "@/api/files";
+import type { BBoxResponse } from "@/api/types";
 import * as BBoxLayer from "@/components/BBoxLayer";
 import { useEffect, useRef } from "react";
 

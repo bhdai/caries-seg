@@ -14,3 +14,4 @@
 - The web frontend advertises a 20 MB per-image upload limit, but `POST /api/jobs` rejects anything over 10 MB; align the client copy and dropzone validation with the backend limit.
 - The frontend API type union still includes `attention_unet` even though backend form validation only accepts `unet` and `double_unet`, so the client type contract is wider than the real API contract.
 - There is no list/filter jobs endpoint (only create/get-by-id), which blocks implementing a first-class job history page without adding new backend API surface.
+- The current breadcrumb shell loses the previous `/result/:jobId` destination once the user navigates from Result back to Config, so the computed result cannot be reopened from the flow without submitting again.
