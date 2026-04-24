@@ -2,17 +2,22 @@
 // DashboardPage
 // =============================================================================
 //
-// Home route at `/`.  Optimised for "what happened recently?" rather than
-// exhaustive browsing.
+// Home route at `/`.  Optimised for "what happened recently?" and "how many
+// jobs are in each state?" rather than exhaustive browsing.
 //
 // Data flow:
 //   useJobsQuery(DASHBOARD_FILTERS)
 //     → GET /api/jobs?page=1&page_size=5&sort=last_activity_desc
 //     → passes result to RecentJobsList
 //
-// The filter object is defined at module scope so it is referentially stable
-// across renders and does not trigger spurious re-fetches.
+//   DashboardStatusOverview owns its own data fetching via
+//   useDashboardStatusSummaryQuery so it renders independently of the recent
+//   jobs query and can show partial data if one status count query fails.
+//
+// The DASHBOARD_FILTERS object is defined at module scope so it is
+// referentially stable across renders and does not trigger spurious re-fetches.
 
+import { DashboardStatusOverview } from "@/components/dashboard/DashboardStatusOverview";
 import { DashboardSummary } from "@/components/dashboard/DashboardSummary";
 import { RecentJobsList } from "@/components/dashboard/RecentJobsList";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,9 +37,10 @@ const DASHBOARD_FILTERS: JobFilters = {
 /**
  * Dashboard home page.
  *
- * Shows the five most-recently-active jobs with quick-action buttons so
- * users can jump straight into a result or rerun an existing job without
- * navigating to the full History table.
+ * Shows the status overview (count chips + distribution chart) and the five
+ * most-recently-active jobs with quick-action buttons so users can jump
+ * straight into a result or rerun an existing job without navigating to the
+ * full History table.
  */
 export default function DashboardPage() {
   const { data, isLoading, isError } = useJobsQuery(DASHBOARD_FILTERS);
@@ -45,6 +51,13 @@ export default function DashboardPage() {
       {/* Page header with primary CTA                                        */}
       {/* ------------------------------------------------------------------ */}
       <DashboardSummary />
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Status overview — count chips and distribution chart               */}
+      {/* Fetches its own data independently so it does not block on the     */}
+      {/* recent-jobs query and can display partial counts gracefully.        */}
+      {/* ------------------------------------------------------------------ */}
+      <DashboardStatusOverview />
 
       {/* ------------------------------------------------------------------ */}
       {/* Recent jobs                                                         */}
@@ -77,3 +90,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+

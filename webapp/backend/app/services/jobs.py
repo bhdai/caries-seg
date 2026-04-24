@@ -207,6 +207,56 @@ def _job_to_summary(job: Job) -> JobSummaryResponse:
 
 
 # ---------------------------------------------------------------------------
+# Delete job
+# ---------------------------------------------------------------------------
+
+
+async def delete_job(job_id: uuid.UUID, db: AsyncSession) -> None:
+    """Permanently delete a job and its associated on-disk files.
+
+    Image result rows are cascade-deleted by the database (configured on the
+    ORM relationship).  File cleanup is best-effort: failures are logged but
+    do not abort the operation because the database rows are authoritative and
+    the job is already gone from the system's perspective by the time we reach
+    the file-removal loop.
+
+    Args:
+        job_id: UUID of the job to delete.
+        db: Active async database session.
+
+    Raises:
+        HTTPException 404: No job with the given ID exists.
+    """
+    import logging as _logging
+
+    _log = _logging.getLogger(__name__)
+
+    result = await db.execute(select(Job).where(Job.id == job_id))
+    job = result.scalar_one_or_none()
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found.")
+
+    # Collect every on-disk path before deleting the ORM rows so we still
+    # have the path strings after the database commit clears them.
+    paths_to_remove: list[Path] = []
+    for ir in job.image_results:
+        for path_str in (ir.upload_path, ir.display_path, ir.mask_path):
+            if path_str:
+                paths_to_remove.append(Path(path_str))
+
+    await db.delete(job)
+    await db.commit()
+
+    # Best-effort file cleanup.  Orphaned files are wasteful but not harmful;
+    # raising here would be misleading because the job record is already gone.
+    for path in paths_to_remove:
+        try:
+            path.unlink(missing_ok=True)
+        except OSError as exc:
+            _log.warning("Could not remove file for deleted job %s: %s", job_id, exc)
+
+
+# ---------------------------------------------------------------------------
 # Server-side rerun
 # ---------------------------------------------------------------------------
 

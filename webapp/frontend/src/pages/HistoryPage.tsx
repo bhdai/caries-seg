@@ -13,6 +13,8 @@
 //     is enforced in the HistoryFilters component before onChange fires.
 //   - Navigate to /result/:jobId on row open and hand off rerun to the
 //     useRerunJobMutation hook.
+//   - Manage row selection state (Set<string>) for bulk operations.
+//   - Bulk-delete selected jobs with a confirmation dialog.
 //
 // Components rendered:
 //   HistoryFilters  — search, dropdowns, reset button
@@ -21,15 +23,26 @@
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { HistoryFilters } from "@/components/history/HistoryFilters";
 import { JobsTable } from "@/components/history/JobsTable";
 import { JobsPagination } from "@/components/history/JobsPagination";
 import { DEFAULT_JOB_FILTERS, filtersToParams, parseFiltersFromParams } from "@/lib/jobFilters";
 import { useJobsQuery } from "@/hooks/useJobsQuery";
 import { useRerunJobMutation } from "@/hooks/useRerunJobMutation";
+import { useDeleteJobMutation } from "@/hooks/useDeleteJobMutation";
 import type { JobFilters } from "@/api/types";
-import { UploadCloud } from "lucide-react";
-import { useCallback, useMemo } from "react";
+import { Trash2, UploadCloud } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useStartNewJob } from "@/hooks/useStartNewJob";
 
@@ -108,6 +121,65 @@ export default function HistoryPage() {
   } = useRerunJobMutation();
 
   // ---------------------------------------------------------------------------
+  // Delete mutation
+  // ---------------------------------------------------------------------------
+
+  const { mutate: deleteOne, isPending: isDeletePending } = useDeleteJobMutation();
+
+  // ---------------------------------------------------------------------------
+  // Row selection state
+  // ---------------------------------------------------------------------------
+
+  // Selected job IDs are stored as a Set for O(1) membership tests.  The Set
+  // is re-created on each mutation so React sees a reference change and
+  // re-renders dependants.  Selection is scoped to the current page view;
+  // navigating to a new page (via filter/page change) clears the selection
+  // to prevent phantom selections of rows the user can no longer see.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const handleToggleSelect = useCallback((jobId: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(jobId)) {
+        next.delete(jobId);
+      } else {
+        next.add(jobId);
+      }
+      return next;
+    });
+  }, []);
+
+  // Select-all / deselect-all over the currently visible rows.
+  const handleSelectAll = useCallback((allIds: string[]) => {
+    setSelectedIds((prev) => {
+      const allSelected = allIds.every((id) => prev.has(id));
+      if (allSelected) {
+        // Deselect all visible rows while keeping any selections on other pages.
+        const next = new Set(prev);
+        allIds.forEach((id) => next.delete(id));
+        return next;
+      }
+      // Select all visible rows.
+      return new Set([...prev, ...allIds]);
+    });
+  }, []);
+
+  // ---------------------------------------------------------------------------
+  // Bulk delete
+  // ---------------------------------------------------------------------------
+
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
+
+  const handleBulkDeleteConfirm = useCallback(() => {
+    const ids = [...selectedIds];
+    setSelectedIds(new Set());
+    // Fire one mutation per selected job.  Each mutation invalidates the query
+    // cache on success; the last one triggers a refetch that removes all
+    // deleted rows in one shot.
+    ids.forEach((id) => deleteOne(id));
+  }, [selectedIds, deleteOne]);
+
+  // ---------------------------------------------------------------------------
   // Active-filter detection — passed to JobsTable for empty-state selection
   // ---------------------------------------------------------------------------
 
@@ -117,6 +189,8 @@ export default function HistoryPage() {
     filters.pipelineType !== DEFAULT_JOB_FILTERS.pipelineType ||
     filters.modelArch !== DEFAULT_JOB_FILTERS.modelArch ||
     filters.sort !== DEFAULT_JOB_FILTERS.sort;
+
+  const selectedCount = selectedIds.size;
 
   // ---------------------------------------------------------------------------
   // Render
@@ -166,7 +240,32 @@ export default function HistoryPage() {
       {/* ------------------------------------------------------------------ */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">All Jobs</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base">All Jobs</CardTitle>
+            {selectedCount > 0 && (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">
+                  {selectedCount} job{selectedCount !== 1 ? "s" : ""} selected
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSelectedIds(new Set())}
+                >
+                  Clear selection
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  disabled={isDeletePending}
+                  onClick={() => setBulkDeleteDialogOpen(true)}
+                >
+                  <Trash2 className="h-4 w-4 mr-1.5" />
+                  Delete {selectedCount} job{selectedCount !== 1 ? "s" : ""}
+                </Button>
+              </div>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="px-0 pb-0">
           <JobsTable
@@ -175,9 +274,13 @@ export default function HistoryPage() {
             isLoading={isLoading}
             isRefetching={isPlaceholderData}
             rerunPendingJobId={isRerunPending ? rerunJobId : undefined}
+            selectedIds={selectedIds}
             onResetFilters={resetFilters}
             onOpenJob={(jobId) => navigate(`/result/${jobId}`)}
             onRerun={(jobId) => rerun(jobId)}
+            onDeleteOne={(jobId) => deleteOne(jobId)}
+            onToggleSelect={handleToggleSelect}
+            onSelectAll={handleSelectAll}
           />
 
           {/* Pagination — shown only when there is data to paginate */}
@@ -204,6 +307,34 @@ export default function HistoryPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Bulk delete confirmation dialog                                     */}
+      {/* ------------------------------------------------------------------ */}
+      <AlertDialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete {selectedCount} job{selectedCount !== 1 ? "s" : ""}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove the selected job
+              {selectedCount !== 1 ? "s" : ""} and all their result files.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleBulkDeleteConfirm}
+            >
+              Delete {selectedCount} job{selectedCount !== 1 ? "s" : ""}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
+

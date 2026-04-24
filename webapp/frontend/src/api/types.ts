@@ -127,3 +127,29 @@ export class ApiError extends Error {
     this.name = "ApiError";
   }
 }
+
+// ---------------------------------------------------------------------------
+// Dashboard status summary — derived client-side from four parallel list
+// queries; not a backend DTO.
+// ---------------------------------------------------------------------------
+
+/**
+ * Represent the normalized dashboard job-status counts used by both
+ * summary chips and chart components.
+ * The object is intentionally presentation-ready so the page layer does
+ * not need to repeat label, color, or total calculations.
+ */
+export interface DashboardStatusSummary {
+  pending: number;
+  processing: number;
+  completed: number;
+  failed: number;
+  total: number;
+  chartData: Array<{
+    status: JobStatus;
+    label: string;
+    count: number;
+    /** CSS color token string suitable for fill/stroke props. */
+    colorToken: string;
+  }>;
+}

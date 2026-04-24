@@ -84,3 +84,15 @@ export async function rerunJob(jobId: string): Promise<JobDetail> {
   const res = await apiFetch(`/api/jobs/${jobId}/rerun`, { method: "POST" });
   return res.json() as Promise<JobDetail>;
 }
+
+// ---------------------------------------------------------------------------
+// Delete
+// ---------------------------------------------------------------------------
+
+/**
+ * Permanently delete a job and its associated on-disk files.
+ * Returns void on success (HTTP 204 No Content).
+ */
+export async function deleteJob(jobId: string): Promise<void> {
+  await apiFetch(`/api/jobs/${jobId}`, { method: "DELETE" });
+}
