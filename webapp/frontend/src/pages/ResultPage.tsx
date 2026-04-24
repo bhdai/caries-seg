@@ -96,7 +96,6 @@ export default function ResultPage() {
   const ARCH_LABELS: Record<string, string> = {
     unet: "UNet",
     double_unet: "Double-UNet",
-    attention_unet: "AttentionUNet",
   };
   const showBoundingBoxToggle = job?.pipeline_type === "two_stage";
 
