@@ -1,5 +1,7 @@
 ## Deferred Notes
 
+- After Phase 5 is complete, apply a shadcn/ui theme preset from https://ui.shadcn.com/themes as a dedicated design pass; it is a pure CSS-variable change to `webapp/frontend/src/index.css` and can be done in minutes without touching component code.
+
 - The extracted benchmark paper description does not fully match the shipped reference repo code: loss, augmentation, batch-size, and checkpoint-selection details appear to differ and should be reconciled before treating the paper numbers as a strict reproduction target.
 - The local training workflow loads the test split but only reports validation metrics; add a dedicated local test evaluation entrypoint so benchmark comparisons do not rely on validation logs.
 - The current random validation split appears harder and more heterogeneous than the official test split based on lesion-coverage statistics, so validation F1 is likely pessimistic relative to held-out test performance.
