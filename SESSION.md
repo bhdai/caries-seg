@@ -15,3 +15,5 @@
 - The frontend API type union still includes `attention_unet` even though backend form validation only accepts `unet` and `double_unet`, so the client type contract is wider than the real API contract.
 - There is no list/filter jobs endpoint (only create/get-by-id), which blocks implementing a first-class job history page without adding new backend API surface.
 - The current breadcrumb shell loses the previous `/result/:jobId` destination once the user navigates from Result back to Config, so the computed result cannot be reopened from the flow without submitting again.
+- The new `GET /api/jobs` search query interpolates raw user text into an `ILIKE '%...%'` pattern without escaping `%` or `_`, so literal underscores and percent signs in filenames behave as SQL wildcards and can return false-positive matches.
+- The new rerun path copies uploads/display images to disk before the transaction commits, but it does not clean those files up if a later copy/decode/write step fails; a rerun error can therefore leave orphaned files under the new job namespace.

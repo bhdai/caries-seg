@@ -1,4 +1,12 @@
-"""POST /api/jobs and GET /api/jobs/{job_id} route handlers."""
+"""Route handlers for all job-related endpoints.
+
+Endpoints
+---------
+POST   /api/jobs                      Create a new inference job.
+GET    /api/jobs                      List jobs (paginated, filterable).
+GET    /api/jobs/{job_id}             Full job detail for a single job.
+POST   /api/jobs/{job_id}/rerun       Server-side rerun from stored uploads.
+"""
 
 from __future__ import annotations
 
@@ -7,7 +15,7 @@ from typing import Annotated
 
 import cv2
 import numpy as np
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
@@ -18,6 +26,15 @@ from app.inference.worker import run_inference
 from app.models.image_result import ImageResult
 from app.models.job import Job, JobStatus
 from app.schemas.job import JobResponse, ModelArchField, PipelineTypeField
+from app.schemas.job_history import (
+    JobListQuery,
+    JobsPageResponse,
+    ModelFilter,
+    PipelineFilter,
+    SortOrder,
+    StatusFilter,
+)
+import app.services.jobs as jobs_service
 
 router = APIRouter(prefix="/jobs")
 
@@ -203,3 +220,89 @@ async def get_job(
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found.")
 
     return JobResponse.model_validate(job)
+
+
+# ---------------------------------------------------------------------------
+# GET /api/jobs  (list with filters and pagination)
+# ---------------------------------------------------------------------------
+
+
+def _parse_list_query(
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+    status: Annotated[StatusFilter, Query()] = "all",
+    pipeline_type: Annotated[PipelineFilter, Query()] = "all",
+    model_arch: Annotated[ModelFilter, Query()] = "all",
+    search: Annotated[str | None, Query(max_length=200)] = None,
+    sort: Annotated[SortOrder, Query()] = "last_activity_desc",
+) -> JobListQuery:
+    """Construct a validated ``JobListQuery`` from individual query parameters.
+
+    Defined as a dependency factory so FastAPI surfaces each parameter in
+    the OpenAPI schema and validates enum membership before the handler runs.
+    """
+    return JobListQuery(
+        page=page,
+        page_size=page_size,
+        status=status,
+        pipeline_type=pipeline_type,
+        model_arch=model_arch,
+        search=search,
+        sort=sort,
+    )
+
+
+@router.get("", response_model=JobsPageResponse)
+async def list_jobs(
+    query: Annotated[JobListQuery, Depends(_parse_list_query)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> JobsPageResponse:
+    """Return a paginated, filterable list of job summaries.
+
+    Supports filtering by status, pipeline type, and model architecture,
+    free-text search across job IDs and image filenames, and three sort
+    orders.  Results are always newest-first within each sort variant's
+    tie-breaker rules to keep pagination stable.
+
+    Query parameters
+    ----------------
+    page         : 1-based page number (default 1).
+    page_size    : Items per page, 1–100 (default 20).
+    status       : One of pending | processing | completed | failed | all.
+    pipeline_type: One of single_stage | two_stage | all.
+    model_arch   : One of unet | double_unet | all.
+    search       : Free-text match against job ID or image filenames.
+    sort         : newest | oldest | last_activity_desc (default).
+    """
+    return await jobs_service.list_jobs(query, db)
+
+
+# ---------------------------------------------------------------------------
+# POST /api/jobs/{job_id}/rerun
+# ---------------------------------------------------------------------------
+
+
+@router.post("/{job_id}/rerun", status_code=202, response_model=JobResponse)
+async def rerun_job(
+    job_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> JobResponse:
+    """Create a new pending job by reusing an existing job's stored uploads.
+
+    Verifies that all source upload files still exist on disk before
+    committing any new rows, then copies inputs into a fresh job namespace
+    and enqueues inference.
+
+    Returns:
+        HTTP 202 with the full ``JobResponse`` for the new pending job.
+
+    Raises:
+        HTTPException 404: Source job does not exist.
+        HTTPException 409: Source job has no image results, or one or more
+            upload files are no longer available on disk.
+        HTTPException 422: A source file cannot be decoded as a valid image.
+        HTTPException 500: Unexpected storage error while copying files.
+    """
+    return await jobs_service.rerun_job(job_id, db, settings, background_tasks)
