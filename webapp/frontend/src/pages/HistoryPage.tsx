@@ -30,7 +30,8 @@ import { useRerunJobMutation } from "@/hooks/useRerunJobMutation";
 import type { JobFilters } from "@/api/types";
 import { UploadCloud } from "lucide-react";
 import { useCallback, useMemo } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { useStartNewJob } from "@/hooks/useStartNewJob";
 
 /**
  * History page — full list, filters, search, and server-side pagination.
@@ -42,6 +43,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 export default function HistoryPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+  const startNewJob = useStartNewJob();
 
   // ---------------------------------------------------------------------------
   // Filter state — parsed from URL, normalised to defaults for missing values
@@ -132,11 +134,9 @@ export default function HistoryPage() {
             All inference jobs, filterable by status, pipeline, and model.
           </p>
         </div>
-        <Button asChild>
-          <Link to="/upload">
-            <UploadCloud className="h-4 w-4 mr-2" />
-            New Job
-          </Link>
+        <Button onClick={startNewJob}>
+          <UploadCloud className="h-4 w-4 mr-2" />
+          New Job
         </Button>
       </div>
 

@@ -34,6 +34,11 @@ export interface ImageResultResponse {
   original_size: { width: number; height: number };
   inference_time_ms: number | null;
   bounding_boxes: BBoxResponse[] | null;
+  /**
+   * True when the final mask artifact exists and this image can be rendered
+   * as a completed result card.  Derived server-side from `mask_path != null`.
+   */
+  is_ready: boolean;
 }
 
 /**

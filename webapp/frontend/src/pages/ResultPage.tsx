@@ -21,12 +21,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useJobDetailQuery } from "@/hooks/useJobDetailQuery";
+import { useStartNewJob } from "@/hooks/useStartNewJob";
 import { useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 
 export default function ResultPage() {
   const { jobId } = useParams<{ jobId: string }>();
-  const navigate = useNavigate();
+  const startNewJob = useStartNewJob();
 
   const { data: job, error } = useJobDetailQuery(jobId);
 
@@ -61,7 +62,7 @@ export default function ResultPage() {
         </div>
         <div className="flex items-center gap-3">
           {job && <JobStatusChip status={job.status} />}
-          <Button variant="outline" size="sm" onClick={() => navigate("/upload")}>
+          <Button variant="outline" size="sm" onClick={startNewJob}>
             New Job
           </Button>
         </div>

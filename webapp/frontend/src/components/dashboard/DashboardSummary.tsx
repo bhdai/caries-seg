@@ -9,7 +9,7 @@
 
 import { Button } from "@/components/ui/button";
 import { UploadCloud } from "lucide-react";
-import { Link } from "react-router-dom";
+import { useStartNewJob } from "@/hooks/useStartNewJob";
 
 /**
  * Render the dashboard page header: title, subtitle, and the primary
@@ -20,6 +20,7 @@ import { Link } from "react-router-dom";
  * DashboardPage.
  */
 export function DashboardSummary() {
+  const startNewJob = useStartNewJob();
   return (
     <div className="flex items-start justify-between">
       <div>
@@ -30,11 +31,9 @@ export function DashboardSummary() {
       </div>
 
       {/* Primary CTA — always visible to encourage the upload flow. */}
-      <Button asChild>
-        <Link to="/upload">
-          <UploadCloud className="h-4 w-4 mr-2" />
-          New Job
-        </Link>
+      <Button onClick={startNewJob}>
+        <UploadCloud className="h-4 w-4 mr-2" />
+        New Job
       </Button>
     </div>
   );
