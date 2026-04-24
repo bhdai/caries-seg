@@ -21,6 +21,7 @@ class JobResponse(BaseModel):
     model_arch: str
     error_message: str | None
     created_at: datetime
+    updated_at: datetime
     image_results: list[ImageResultResponse]
 
     model_config = {"from_attributes": True}
