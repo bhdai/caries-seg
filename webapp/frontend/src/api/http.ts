@@ -17,6 +17,16 @@ export { ApiError };
 /**
  * Perform a fetch and throw ApiError on non-2xx responses.
  *
+ * `credentials: "include"` is merged into every request so the browser
+ * sends the httponly auth cookie to the backend automatically — callers do
+ * not need to manage tokens themselves.
+ *
+ * On a 401 response the wrapper dispatches a window-level
+ * `"auth:unauthorized"` event before throwing. AuthContext listens for this
+ * event to clear the user state and trigger a redirect to /login. This
+ * approach keeps the HTTP layer decoupled from React context (no circular
+ * imports).
+ *
  * Tries to extract a human-readable detail message from a JSON body shaped
  * like FastAPI's standard error envelope `{ "detail": "..." }`.
  */
@@ -24,7 +34,11 @@ export async function apiFetch(
   input: RequestInfo | URL,
   init?: RequestInit,
 ): Promise<Response> {
-  const res = await fetch(input, init);
+  // Merge caller-supplied init with the baseline credentials policy so every
+  // request carries the auth cookie without requiring callers to remember it.
+  const mergedInit: RequestInit = { credentials: "include", ...init };
+
+  const res = await fetch(input, mergedInit);
   if (!res.ok) {
     let message = `HTTP ${res.status}`;
     try {
@@ -37,6 +51,13 @@ export async function apiFetch(
     } catch {
       // JSON parse failed; fall back to the generic status message.
     }
+
+    // Notify AuthContext that the session has expired or was never established.
+    // Using a custom DOM event decouples this module from React's context API.
+    if (res.status === 401) {
+      window.dispatchEvent(new Event("auth:unauthorized"));
+    }
+
     throw new ApiError(res.status, message);
   }
   return res;

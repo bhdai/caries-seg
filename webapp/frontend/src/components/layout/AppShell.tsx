@@ -7,11 +7,13 @@
 // Dashboard, History, Upload, Config, and Result all feel connected.
 
 import { AppBreadcrumbs } from "@/components/layout/AppBreadcrumbs";
+import { UserMenu } from "@/components/layout/UserMenu";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, Clock, UploadCloud } from "lucide-react";
+import { LayoutDashboard, Clock, UploadCloud, ShieldCheck } from "lucide-react";
 import type { ReactNode } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useStartNewJob } from "@/hooks/useStartNewJob";
+import { useAuth } from "@/context/AuthContext";
 
 interface AppShellProps {
   children: ReactNode;
@@ -26,6 +28,7 @@ interface AppShellProps {
 export function AppShell({ children }: AppShellProps) {
   const location = useLocation();
   const startNewJob = useStartNewJob();
+  const { user } = useAuth();
 
   // Determine whether we are in the multi-step upload flow so we can hide
   // redundant nav items and keep the flow focused.
@@ -57,11 +60,19 @@ export function AppShell({ children }: AppShellProps) {
             <NavItem to="/history" icon={<Clock className="h-4 w-4" />}>
               History
             </NavItem>
+            {/* Admin panel link — only rendered for users with the admin role */}
+            {user?.role === "admin" && (
+              <NavItem to="/admin/users" icon={<ShieldCheck className="h-4 w-4" />}>
+                Admin
+              </NavItem>
+            )}
             {/* Upload CTA is always visible for quick access */}
             <Button size="sm" className="ml-2" onClick={startNewJob}>
               <UploadCloud className="h-4 w-4 mr-1.5" />
               New Job
             </Button>
+            {/* User account menu — logout and change password */}
+            <UserMenu />
           </nav>
         </div>
 

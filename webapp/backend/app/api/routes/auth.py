@@ -8,15 +8,13 @@ GET    /api/auth/me                 Return the current user (auth-state probe).
 POST   /api/auth/change-password    Validate old password, set new password.
 GET    /api/auth/google             Redirect to Google's OAuth2 consent screen.
 GET    /api/auth/google/callback    Exchange code, set cookie, redirect to app.
-POST   /api/auth/link-google        Link the current user's account to Google.
-
-POST /api/auth/link-google is implemented in Phase 2 Step 2.3 and is not
-present here yet.
+GET    /api/auth/google/link        Initiate popup-based Google linking flow.
+POST   /api/auth/link-google        Complete popup linking: exchange code, create OAuthAccount row.
 
 This router has **no** auth dependency at the router level so that unauthenticated
 callers can reach ``/login`` and ``/me`` (which returns 401 on its own when the
-cookie is absent).  ``/change-password`` applies ``get_current_user`` at the
-handler level because it needs the authenticated user.
+cookie is absent).  ``/change-password`` and ``/google/link`` apply
+``get_current_user`` at the handler level because they need the authenticated user.
 """
 
 from __future__ import annotations
@@ -58,6 +56,29 @@ _STATE_COOKIE_MAX_AGE = 600  # 10 minutes
 router = APIRouter(prefix="/auth")
 
 
+# ---------------------------------------------------------------------------
+# Response builder
+# ---------------------------------------------------------------------------
+
+async def _build_user_response(user: User, db: AsyncSession) -> UserResponse:
+    """Build a ``UserResponse`` populated with the user's linked OAuth providers.
+
+    Queries ``oauth_accounts`` for the user so the frontend can show which
+    providers are linked without a separate API call.
+    """
+    result = await db.execute(
+        select(OAuthAccount.provider).where(OAuthAccount.user_id == user.id)
+    )
+    providers = [row[0] for row in result.all()]
+    return UserResponse(
+        id=user.id,
+        username=user.username,
+        role=user.role,
+        must_change_pw=user.must_change_pw,
+        oauth_providers=providers,
+    )
+
+
 @router.post("/login")
 async def login(
     body: LoginRequest,
@@ -94,8 +115,9 @@ async def login(
 
     # Build the response body first, then attach the cookie so that the
     # JSONResponse constructor receives a plain dict rather than a Response.
+    user_response = await _build_user_response(user, db)
     response_body = AuthResponse(
-        user=UserResponse.model_validate(user),
+        user=user_response,
         message="Logged in",
     )
     response = JSONResponse(content=response_body.model_dump(mode="json"))
@@ -116,13 +138,14 @@ async def logout(
 @router.get("/me", response_model=UserResponse)
 async def me(
     user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> UserResponse:
     """Return the current user's public profile.
 
     This is the frontend's single source of truth for authentication state on
     page load.  A 401 response means the cookie is absent or expired.
     """
-    return UserResponse.model_validate(user)
+    return await _build_user_response(user, db)
 
 
 @router.post("/change-password")
@@ -164,8 +187,9 @@ async def change_password(
     await db.refresh(db_user)
 
     token = create_access_token({"sub": str(db_user.id)}, settings)
+    user_response = await _build_user_response(db_user, db)
     response_body = AuthResponse(
-        user=UserResponse.model_validate(db_user),
+        user=user_response,
         message="Password changed",
     )
     response = JSONResponse(content=response_body.model_dump(mode="json"))
@@ -227,6 +251,57 @@ async def google_login(
     return response
 
 
+@router.get("/google/link")
+async def google_link_init(
+    _user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> RedirectResponse:
+    """Redirect the authenticated user's popup to Google's consent screen.
+
+    This is the popup-based counterpart to ``GET /api/auth/google``.  The
+    redirect URI used here is ``GOOGLE_LINK_REDIRECT_URI``, which must point
+    to the frontend's popup callback page (``/auth/google/link-callback``)
+    and must be registered separately in Google Cloud Console.
+
+    Using a distinct redirect URI keeps the popup callback page at the same
+    origin as the frontend, which is required for ``window.opener.postMessage``
+    to be accepted by the parent window's message listener.
+
+    Returns 404 if either ``GOOGLE_CLIENT_ID`` or
+    ``GOOGLE_LINK_REDIRECT_URI`` is not configured.
+    """
+    if settings.GOOGLE_CLIENT_ID is None or settings.GOOGLE_LINK_REDIRECT_URI is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Google account linking not configured",
+        )
+
+    state = secrets.token_urlsafe(32)
+    params = urlencode(
+        {
+            "client_id": settings.GOOGLE_CLIENT_ID,
+            "redirect_uri": settings.GOOGLE_LINK_REDIRECT_URI,
+            "response_type": "code",
+            "scope": "openid profile email",
+            "state": state,
+        }
+    )
+    auth_url = f"{_GOOGLE_AUTH_URL}?{params}"
+
+    response = RedirectResponse(url=auth_url)
+    # Separate cookie key prevents collision with an in-progress login flow.
+    response.set_cookie(
+        key="oauth_link_state",
+        value=state,
+        httponly=True,
+        samesite="lax",
+        secure=settings.COOKIE_SECURE,
+        max_age=_STATE_COOKIE_MAX_AGE,
+        path="/",
+    )
+    return response
+
+
 @router.get("/google/callback")
 async def google_callback(
     request: Request,
@@ -255,17 +330,17 @@ async def google_callback(
 
     # Step 1 — user denied consent or Google reported an error.
     if error is not None:
-        return RedirectResponse(url="/login?error=google_denied")
+        return RedirectResponse(url=f"{settings.FRONTEND_URL}/login?error=google_denied")
 
     # Step 2 — CSRF: validate the state cookie.
     stored_state = request.cookies.get("oauth_state")
     if not stored_state or stored_state != state:
-        return RedirectResponse(url="/login?error=invalid_state")
+        return RedirectResponse(url=f"{settings.FRONTEND_URL}/login?error=invalid_state")
 
     if code is None:
         # Should not happen if error is None and state is valid, but guard
         # defensively to avoid a confusing 422 from the missing parameter.
-        return RedirectResponse(url="/login?error=invalid_state")
+        return RedirectResponse(url=f"{settings.FRONTEND_URL}/login?error=invalid_state")
 
     # Step 3 — exchange the authorisation code for an id_token.
     try:
@@ -286,11 +361,11 @@ async def google_callback(
         token_data = token_response.json()
     except httpx.HTTPError:
         # Google token exchange failed (network issue or invalid code).
-        return RedirectResponse(url="/login?error=google_denied")
+        return RedirectResponse(url=f"{settings.FRONTEND_URL}/login?error=google_denied")
 
     id_token_str = token_data.get("id_token")
     if not id_token_str:
-        return RedirectResponse(url="/login?error=google_denied")
+        return RedirectResponse(url=f"{settings.FRONTEND_URL}/login?error=google_denied")
 
     # Step 4 — decode the id_token without signature verification.
     #
@@ -306,11 +381,11 @@ async def google_callback(
             algorithms=["RS256"],
         )
     except pyjwt.PyJWTError:
-        return RedirectResponse(url="/login?error=google_denied")
+        return RedirectResponse(url=f"{settings.FRONTEND_URL}/login?error=google_denied")
 
     google_sub = payload.get("sub")
     if not google_sub:
-        return RedirectResponse(url="/login?error=google_denied")
+        return RedirectResponse(url=f"{settings.FRONTEND_URL}/login?error=google_denied")
 
     # Step 5 — look up the oauth_accounts row for this Google identity.
     result = await db.execute(
@@ -326,17 +401,17 @@ async def google_callback(
         # The Google account exists but has not been linked to any local user.
         # Consistent with the admin-provisioned security model (D11): no
         # auto-registration.
-        return RedirectResponse(url="/login?error=google_not_linked")
+        return RedirectResponse(url=f"{settings.FRONTEND_URL}/login?error=google_not_linked")
 
     # Load the linked user and issue a session cookie.
     user = await db.get(User, oauth_account.user_id)
     if user is None:
         # The linked user was deleted while the oauth_accounts row was kept
         # (should not happen with CASCADE, but guard defensively).
-        return RedirectResponse(url="/login?error=google_not_linked")
+        return RedirectResponse(url=f"{settings.FRONTEND_URL}/login?error=google_not_linked")
 
     token = create_access_token({"sub": str(user.id)}, settings)
-    response = RedirectResponse(url="/")
+    response = RedirectResponse(url=f"{settings.FRONTEND_URL}/")
     set_auth_cookie(response, token, settings)
     # Clear the state cookie — it is single-use.
     response.delete_cookie(key="oauth_state", path="/")
@@ -345,6 +420,7 @@ async def google_callback(
 
 @router.post("/link-google")
 async def link_google(
+    request: Request,
     body: LinkGoogleRequest,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -352,24 +428,35 @@ async def link_google(
 ) -> dict:
     """Link the authenticated user's account to a Google identity.
 
-    The frontend obtains a Google authorisation ``code`` via a popup-based
-    OAuth2 flow (the user authenticates with Google in a popup window and the
-    code is posted back via ``postMessage``).  This endpoint exchanges the
-    code for an id_token, extracts the Google ``sub``, and creates an
-    ``OAuthAccount`` row binding that identity to the current user.
+    The frontend popup obtains a Google authorisation ``code`` and ``state``
+    via the popup flow initiated by ``GET /api/auth/google/link`` and posts
+    them back to the parent window via ``postMessage``.  The parent window
+    then calls this endpoint to complete the exchange.
 
-    Raises 404 if Google OAuth is not configured.
+    Raises 404 if Google account linking is not configured.
+    Raises 400 if the CSRF state is invalid or the code exchange fails.
     Raises 409 if the Google account is already linked to a *different* user.
-    Raises 400 if the code exchange fails or the id_token is invalid.
     """
-    if settings.GOOGLE_CLIENT_ID is None:
+    if settings.GOOGLE_CLIENT_ID is None or settings.GOOGLE_LINK_REDIRECT_URI is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Google OAuth not configured",
+            detail="Google account linking not configured",
         )
 
-    # Exchange the authorisation code for an id_token using the redirect_uri
-    # provided by the caller (must match the one registered in Google Console).
+    # Validate the CSRF state cookie.  The state was set during the
+    # flow initiation step (GET /api/auth/google/link) and is single-use.
+    stored_state = request.cookies.get("oauth_link_state")
+    if not stored_state or stored_state != body.state:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid OAuth state — possible CSRF attempt or session expired",
+        )
+
+    # Exchange the authorisation code for an id_token using the backend-
+    # configured link redirect URI (set via GOOGLE_LINK_REDIRECT_URI env var).
+    # Using the env var rather than a client-supplied value prevents
+    # open-redirect attacks where a malicious caller could pass an
+    # arbitrary URI to Google's token endpoint.
     try:
         async with httpx.AsyncClient() as client:
             token_response = await client.post(
@@ -378,7 +465,7 @@ async def link_google(
                     "code": body.code,
                     "client_id": settings.GOOGLE_CLIENT_ID,
                     "client_secret": settings.GOOGLE_CLIENT_SECRET,
-                    "redirect_uri": body.redirect_uri,
+                    "redirect_uri": settings.GOOGLE_LINK_REDIRECT_URI,
                     "grant_type": "authorization_code",
                 },
                 headers={"Accept": "application/json"},
@@ -433,7 +520,10 @@ async def link_google(
     if existing is not None:
         if existing.user_id == user.id:
             # Already linked to this same user — idempotent success.
-            return {"message": "Google account already linked"}
+            # Still clear the CSRF state cookie.
+            response = JSONResponse(content={"message": "Google account already linked"})
+            response.delete_cookie(key="oauth_link_state", path="/")
+            return response
         # Linked to a *different* user — reject to prevent account takeover.
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -449,4 +539,7 @@ async def link_google(
     db.add(oauth_account)
     await db.commit()
 
-    return {"message": "Google account linked successfully"}
+    # Clear the single-use CSRF state cookie.
+    response = JSONResponse(content={"message": "Google account linked successfully"})
+    response.delete_cookie(key="oauth_link_state", path="/")
+    return response

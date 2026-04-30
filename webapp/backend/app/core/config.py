@@ -103,6 +103,23 @@ class Settings(BaseSettings):
     # "http://localhost:8000/api/auth/google/callback" for local dev or
     # "https://example.com/api/auth/google/callback" in production.
     GOOGLE_REDIRECT_URI: Optional[str] = None
+    # Separate redirect URI for the popup-based account *linking* flow.
+    # Must point to the frontend popup callback page, e.g.
+    # "http://localhost:5173/auth/google/link-callback" for local dev or
+    # "https://example.com/auth/google/link-callback" in production.
+    # Both URIs must be registered in Google Cloud Console.
+    # If unset, the linking flow returns 404 even when Google OAuth is
+    # otherwise configured.
+    GOOGLE_LINK_REDIRECT_URI: Optional[str] = None
+
+    # ------------------------------------------------------------------
+    # Frontend URL
+    # ------------------------------------------------------------------
+    # Base URL of the frontend application.  Used by backend-initiated
+    # browser redirects (e.g. after OAuth callbacks) so that the browser
+    # lands on the correct origin in both dev (Vite on a different port)
+    # and production (same origin via nginx).
+    FRONTEND_URL: str = "http://localhost:5173"
 
     # ------------------------------------------------------------------
     # Validators

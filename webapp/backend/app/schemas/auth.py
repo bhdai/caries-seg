@@ -29,17 +29,15 @@ class ChangePasswordRequest(BaseModel):
 class LinkGoogleRequest(BaseModel):
     """Payload for ``POST /api/auth/link-google``.
 
-    The frontend obtains ``code`` via a popup-based OAuth2 flow and passes it
-    here along with the ``redirect_uri`` that was registered in the Google
-    Cloud Console for the popup origin (must match exactly what Google expects
-    during the code-exchange step).
+    The frontend popup callback page receives ``code`` and ``state`` from
+    Google's redirect, posts them back to the parent window via
+    ``postMessage``, and the parent POSTs them here.  ``state`` is validated
+    against the ``oauth_link_state`` CSRF cookie set during the flow
+    initiation step (``GET /api/auth/google/link``).
     """
 
     code: str = Field(min_length=1)
-    # The redirect_uri used when initiating the popup flow.  Must match the
-    # URI registered with Google for the client; included in the token
-    # exchange request as required by RFC 6749 §4.1.3.
-    redirect_uri: str = Field(min_length=1)
+    state: str = Field(min_length=1)
 
 
 class UserResponse(BaseModel):
@@ -54,6 +52,10 @@ class UserResponse(BaseModel):
     username: str
     role: str
     must_change_pw: bool
+    # List of OAuth provider names this account has linked (e.g. ["google"]).
+    # Empty list means password-only; non-empty shows which SSO providers are
+    # available. Used by the frontend to conditionally show "Link Google Account".
+    oauth_providers: list[str] = []
 
     model_config = {"from_attributes": True}
 

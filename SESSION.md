@@ -1,5 +1,6 @@
 ## Deferred Notes
 
+- The "Link Google Account" popup flow requires `GOOGLE_LINK_REDIRECT_URI` (`http://localhost:5173/auth/google/link-callback` in dev) to be registered as an authorised redirect URI in Google Cloud Console alongside `GOOGLE_REDIRECT_URI`; the env var is set in `.env` but Google Console registration must be done manually.
 - The extracted benchmark paper description does not fully match the shipped reference repo code: loss, augmentation, batch-size, and checkpoint-selection details appear to differ and should be reconciled before treating the paper numbers as a strict reproduction target.
 - The local training workflow loads the test split but only reports validation metrics; add a dedicated local test evaluation entrypoint so benchmark comparisons do not rely on validation logs.
 - The current random validation split appears harder and more heterogeneous than the official test split based on lesion-coverage statistics, so validation F1 is likely pessimistic relative to held-out test performance.
