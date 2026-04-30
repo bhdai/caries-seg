@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from functools import cached_property, lru_cache
 from pathlib import Path
+from typing import Optional
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -50,6 +51,45 @@ class Settings(BaseSettings):
     # PyTorch device selection.  "auto" prefers CUDA when available and
     # falls back to CPU otherwise.
     DEVICE: str = "auto"
+
+    # ------------------------------------------------------------------
+    # Authentication — JWT
+    # ------------------------------------------------------------------
+    # Secret key used to sign JWTs.  Must be set in production; a missing
+    # value causes an immediate startup error so misconfigured deployments
+    # fail loudly rather than accepting unsigned tokens.
+    JWT_SECRET: str
+
+    # HMAC algorithm used to sign tokens.  HS256 is the standard symmetric
+    # choice for single-server deployments.
+    JWT_ALGORITHM: str = "HS256"
+
+    # Session lifetime in hours.  8 hours matches a typical clinical shift,
+    # so staff are not forced to re-login mid-day but sessions do not persist
+    # overnight by default.
+    JWT_EXPIRY_HOURS: int = 8
+
+    # ------------------------------------------------------------------
+    # Authentication — Cookie
+    # ------------------------------------------------------------------
+    # Whether to set the Secure flag on the auth cookie.  Should be True
+    # in production (HTTPS) and False for local HTTP development.
+    COOKIE_SECURE: bool = False
+
+    # Optional domain attribute for the auth cookie.  Leave unset (None)
+    # for single-domain deployments; set to ".example.com" to share the
+    # cookie across subdomains.
+    COOKIE_DOMAIN: Optional[str] = None
+
+    # ------------------------------------------------------------------
+    # Seed admin
+    # ------------------------------------------------------------------
+    # When both vars are present and the users table is empty, the lifespan
+    # handler inserts a bootstrap admin account so the application is
+    # immediately usable after a fresh deployment.  Once any user exists the
+    # seed step is skipped on subsequent restarts.
+    SEED_ADMIN_USERNAME: Optional[str] = None
+    SEED_ADMIN_PASSWORD: Optional[str] = None
 
     # ------------------------------------------------------------------
     # Validators

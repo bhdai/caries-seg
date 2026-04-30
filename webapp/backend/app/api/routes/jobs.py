@@ -19,12 +19,14 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPExcepti
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
+from app.core.auth import get_current_user
 from app.core.config import Settings, get_settings
 from app.core.database import get_db, get_session_factory
 from app.core.storage import StorageError, save_display_copy, save_upload
 from app.inference.worker import run_inference
 from app.models.image_result import ImageResult
 from app.models.job import Job, JobStatus
+from app.models.user import User
 from app.schemas.job import JobResponse, ModelArchField, PipelineTypeField
 from app.schemas.job_history import (
     JobListQuery,
@@ -36,7 +38,12 @@ from app.schemas.job_history import (
 )
 import app.services.jobs as jobs_service
 
-router = APIRouter(prefix="/jobs")
+# Applying get_current_user at the router level ensures every endpoint in this
+# module rejects unauthenticated callers with 401 before handler logic runs.
+# Handlers that need the User instance (all of them here) inject it explicitly
+# via a second Depends(get_current_user); FastAPI resolves it from its cache
+# so no extra DB round-trip occurs.
+router = APIRouter(prefix="/jobs", dependencies=[Depends(get_current_user)])
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -66,6 +73,7 @@ async def create_job(
     background_tasks: BackgroundTasks,
     db: Annotated[AsyncSession, Depends(get_db)],
     settings: Annotated[Settings, Depends(get_settings)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> JobResponse:
     """Accept an inference job submission.
 
@@ -138,6 +146,9 @@ async def create_job(
         status=JobStatus.pending,
         pipeline_type=pipeline_type,
         model_arch=model_arch,
+        # Stamp the submitting user so this job is visible only to them (or
+        # to admins) via the ownership filter in the service layer.
+        owner_id=current_user.id,
     )
     db.add(job)
 
@@ -207,17 +218,25 @@ async def create_job(
 
 @router.get("/{job_id}", response_model=JobResponse)
 async def get_job(
-    job_id: uuid.UUID, db: Annotated[AsyncSession, Depends(get_db)]
+    job_id: uuid.UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> JobResponse:
     """Return the full job payload including all image results.
 
     Raises:
         HTTPException 404: No job with the given ID exists.
+        HTTPException 403: Caller is not the owner and is not an admin.
     """
     result = await db.execute(select(Job).where(Job.id == job_id))
     job = result.scalar_one_or_none()
     if job is None:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found.")
+
+    # Non-admin users may only view their own jobs.  Admins see everything
+    # including orphaned jobs (owner_id=None, i.e. the owner was deleted).
+    if current_user.role != "admin" and job.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied.")
 
     return JobResponse.model_validate(job)
 
@@ -256,13 +275,12 @@ def _parse_list_query(
 async def list_jobs(
     query: Annotated[JobListQuery, Depends(_parse_list_query)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> JobsPageResponse:
     """Return a paginated, filterable list of job summaries.
 
-    Supports filtering by status, pipeline type, and model architecture,
-    free-text search across job IDs and image filenames, and three sort
-    orders.  Results are always newest-first within each sort variant's
-    tie-breaker rules to keep pagination stable.
+    Non-admin users see only their own jobs.  Admins see all jobs including
+    orphaned ones (owner deleted).
 
     Query parameters
     ----------------
@@ -274,7 +292,7 @@ async def list_jobs(
     search       : Free-text match against job ID or image filenames.
     sort         : newest | oldest | last_activity_desc (default).
     """
-    return await jobs_service.list_jobs(query, db)
+    return await jobs_service.list_jobs(query, db, current_user)
 
 
 # ---------------------------------------------------------------------------
@@ -288,6 +306,7 @@ async def rerun_job(
     background_tasks: BackgroundTasks,
     db: Annotated[AsyncSession, Depends(get_db)],
     settings: Annotated[Settings, Depends(get_settings)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> JobResponse:
     """Create a new pending job by reusing an existing job's stored uploads.
 
@@ -305,7 +324,7 @@ async def rerun_job(
         HTTPException 422: A source file cannot be decoded as a valid image.
         HTTPException 500: Unexpected storage error while copying files.
     """
-    return await jobs_service.rerun_job(job_id, db, settings, background_tasks)
+    return await jobs_service.rerun_job(job_id, db, settings, background_tasks, current_user)
 
 
 # ---------------------------------------------------------------------------
@@ -317,6 +336,7 @@ async def rerun_job(
 async def delete_job(
     job_id: uuid.UUID,
     db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> None:
     """Permanently delete a job and all of its stored files.
 
@@ -328,6 +348,7 @@ async def delete_job(
         HTTP 204 No Content on success.
 
     Raises:
+        HTTPException 403: Caller does not own the job and is not an admin.
         HTTPException 404: No job with the given ID exists.
     """
-    await jobs_service.delete_job(job_id, db)
+    await jobs_service.delete_job(job_id, db, current_user)

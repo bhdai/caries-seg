@@ -9,9 +9,10 @@ import pytest
 import pytest_asyncio
 from alembic import command
 from alembic.config import Config
+from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from testcontainers.postgres import PostgresContainer
 
 # ---------------------------------------------------------------------------
@@ -25,8 +26,18 @@ if str(MONOREPO_ROOT) not in sys.path:
     sys.path.insert(0, str(MONOREPO_ROOT))
 
 from app.core.config import get_settings
+from app.core.security import hash_password
 from app.main import create_app
-_TRUNCATE_ALL_TABLES = "TRUNCATE TABLE image_results, jobs RESTART IDENTITY CASCADE"
+from app.models.user import User
+
+# Plain-text passwords used when provisioning test fixtures.  Stored as
+# constants so test_auth.py can reference them without hard-coding.
+_TEST_USER_PASSWORD = "Password1!"
+_TEST_ADMIN_PASSWORD = "AdminPass1!"
+
+_TRUNCATE_ALL_TABLES = (
+    "TRUNCATE TABLE users, oauth_accounts, image_results, jobs RESTART IDENTITY CASCADE"
+)
 
 
 def _to_asyncpg_url(database_url: str) -> str:
@@ -73,12 +84,18 @@ async def reset_database(database_url: str) -> AsyncIterator[None]:
 
 
 @pytest_asyncio.fixture
-async def client(
+async def _app(
     database_url: str,
     reset_database: None,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-) -> AsyncIterator[AsyncClient]:
+) -> AsyncIterator[FastAPI]:
+    """Create and start the FastAPI application with test-scoped settings.
+
+    Splitting the application out of the ``client`` fixture lets
+    ``user_override`` and ``admin_override`` apply dependency overrides to
+    the same ``FastAPI`` instance that ``client`` uses.
+    """
     storage_root = tmp_path / "storage"
     model_root = tmp_path / "models"
     storage_root.mkdir(parents=True, exist_ok=True)
@@ -87,16 +104,110 @@ async def client(
     monkeypatch.setenv("DATABASE_URL", database_url)
     monkeypatch.setenv("STORAGE_ROOT", str(storage_root))
     monkeypatch.setenv("MODEL_ROOT", str(model_root))
+    # A deterministic secret is sufficient for tests — it is never used
+    # outside the test process and does not need to be cryptographically
+    # strong in this context.
+    monkeypatch.setenv("JWT_SECRET", "test-jwt-secret-for-integration-tests-only")
 
     get_settings.cache_clear()
     app = create_app()
 
     async with app.router.lifespan_context(app):
-        transport = ASGITransport(app=app)
-        async with AsyncClient(
-            transport=transport,
-            base_url="http://testserver",
-        ) as test_client:
-            yield test_client
+        yield app
 
     get_settings.cache_clear()
+
+
+@pytest_asyncio.fixture
+async def client(_app: FastAPI) -> AsyncIterator[AsyncClient]:
+    """Unauthenticated HTTP test client backed by the test application.
+
+    Routes that require authentication will return 401 unless a
+    ``user_override`` or ``admin_override`` fixture is also active.
+    """
+    transport = ASGITransport(app=_app)
+    async with AsyncClient(
+        transport=transport,
+        base_url="http://testserver",
+    ) as test_client:
+        yield test_client
+
+
+# ---------------------------------------------------------------------------
+# Auth fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest_asyncio.fixture
+async def test_user(database_url: str, reset_database: None) -> AsyncIterator[User]:
+    """Create a regular (non-admin) test user directly in the test database.
+
+    The user is committed before the fixture yields so it is visible to the
+    application's sessions during the test.  Password is ``_TEST_USER_PASSWORD``
+    so ``test_auth.py`` can test the login flow end-to-end.
+    """
+    engine = create_async_engine(database_url)
+    async with AsyncSession(engine, expire_on_commit=False) as session:
+        user = User(
+            username="testuser",
+            password_hash=hash_password(_TEST_USER_PASSWORD),
+            role="user",
+            must_change_pw=False,
+        )
+        session.add(user)
+        await session.commit()
+        await session.refresh(user)
+        yield user
+    await engine.dispose()
+
+
+@pytest_asyncio.fixture
+async def test_admin(database_url: str, reset_database: None) -> AsyncIterator[User]:
+    """Create an admin test user directly in the test database.
+
+    Password is ``_TEST_ADMIN_PASSWORD`` so ``test_auth.py`` can test admin
+    login and admin-endpoint access.
+    """
+    engine = create_async_engine(database_url)
+    async with AsyncSession(engine, expire_on_commit=False) as session:
+        user = User(
+            username="testadmin",
+            password_hash=hash_password(_TEST_ADMIN_PASSWORD),
+            role="admin",
+            must_change_pw=False,
+        )
+        session.add(user)
+        await session.commit()
+        await session.refresh(user)
+        yield user
+    await engine.dispose()
+
+
+@pytest_asyncio.fixture
+async def user_override(_app: FastAPI, test_user: User) -> AsyncIterator[None]:
+    """Override ``get_current_user`` to return ``test_user`` for all requests.
+
+    Apply this fixture to any test that calls a route requiring authentication
+    but does not need to exercise the JWT/cookie machinery itself.  The
+    override is removed after the test to leave the app clean for the next
+    fixture cycle.
+    """
+    from app.core.auth import get_current_user
+
+    _app.dependency_overrides[get_current_user] = lambda: test_user
+    yield
+    _app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest_asyncio.fixture
+async def admin_override(_app: FastAPI, test_admin: User) -> AsyncIterator[None]:
+    """Override ``get_current_user`` to return ``test_admin`` for all requests.
+
+    Apply this fixture to tests that call admin-only endpoints (``/api/admin/*``)
+    or any route where admin privileges are required.
+    """
+    from app.core.auth import get_current_user
+
+    _app.dependency_overrides[get_current_user] = lambda: test_admin
+    yield
+    _app.dependency_overrides.pop(get_current_user, None)

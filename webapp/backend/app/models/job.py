@@ -12,7 +12,7 @@ import enum
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, Enum, Text, func
+from sqlalchemy import DateTime, Enum, ForeignKey, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -74,6 +74,17 @@ class Job(Base):
         nullable=False,
     )
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Nullable FK to the user who submitted the job.  SET NULL on delete so
+    # that removing a user orphans their jobs (keeps diagnostic data intact)
+    # rather than cascading a destructive delete — per decision D4.
+    # Pre-existing rows (created before auth was added) have owner_id=NULL
+    # and are visible to admins only.
+    owner_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -96,4 +107,12 @@ class Job(Base):
         # selectin loading avoids an N+1 query when returning a job with
         # its results in a single endpoint response.
         lazy="selectin",
+    )
+
+    # Many jobs → one user owner (nullable; NULL means the job is orphaned).
+    owner: Mapped["User | None"] = relationship(  # noqa: F821
+        "User",
+        back_populates="jobs",
+        foreign_keys=[owner_id],
+        lazy="select",
     )

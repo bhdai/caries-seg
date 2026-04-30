@@ -7,6 +7,9 @@ and stream the file with ``FileResponse``.  They return 404 when:
 - No ``ImageResult`` with the given ID exists.
 - The path column is ``None`` (display copy or mask not yet produced).
 - The file does not exist on disk (e.g. volume was reset).
+
+Ownership is enforced: non-admin users may only retrieve files for jobs
+they own.  Orphaned jobs (owner_id=None) are accessible only to admins.
 """
 
 from __future__ import annotations
@@ -19,27 +22,50 @@ from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
+from app.core.auth import get_current_user
 from app.core.database import get_db
 from app.models.image_result import ImageResult
+from app.models.job import Job
+from app.models.user import User
 
-router = APIRouter(prefix="/files")
+# Applying get_current_user at the router level rejects unauthenticated callers
+# before any handler runs.  Individual handlers inject the user instance to
+# perform the ownership check.
+router = APIRouter(prefix="/files", dependencies=[Depends(get_current_user)])
 
 
 async def _get_image_result(
     image_result_id: uuid.UUID,
     db: AsyncSession,
+    current_user: User,
 ) -> ImageResult:
-    """Fetch an ImageResult row or raise 404."""
+    """Fetch an ImageResult row (with its parent Job) or raise 404/403.
+
+    Loads the parent Job via a join so the ownership check is a single round-
+    trip rather than two separate selects.  Raises 403 (not 404) when the row
+    exists but the caller does not own it so that the error message is
+    actionable without leaking the existence of other users' data.
+    """
+    # Join ImageResult → Job in one query to get both rows at once.
     result = await db.execute(
-        select(ImageResult).where(ImageResult.id == image_result_id)
+        select(ImageResult, Job)
+        .join(Job, Job.id == ImageResult.job_id)
+        .where(ImageResult.id == image_result_id)
     )
-    row = result.scalar_one_or_none()
+    row = result.one_or_none()
     if row is None:
         raise HTTPException(
             status_code=404,
             detail=f"ImageResult {image_result_id} not found.",
         )
-    return row
+    image_result, job = row
+
+    # Admins see all files; regular users see only their own jobs.  Orphaned
+    # jobs (owner_id=None) are visible only to admins.
+    if current_user.role != "admin" and job.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied.")
+
+    return image_result
 
 
 def _resolve_file(path_str: str | None, label: str) -> Path:
@@ -79,6 +105,7 @@ def _resolve_file(path_str: str | None, label: str) -> Path:
 async def get_original(
     image_result_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> FileResponse:
     """Stream the display-resized copy of the uploaded image.
 
@@ -86,9 +113,10 @@ async def get_original(
         PNG file with ``Content-Type: image/png``.
 
     Raises:
+        HTTPException 403: Caller does not own the job.
         HTTPException 404: Image result or display copy not found.
     """
-    row = await _get_image_result(image_result_id, db)
+    row = await _get_image_result(image_result_id, db, current_user)
     path = _resolve_file(row.display_path, "Display copy")
     return FileResponse(
         path=str(path),
@@ -106,6 +134,7 @@ async def get_original(
 async def get_mask(
     image_result_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> FileResponse:
     """Stream the binary caries segmentation mask.
 
@@ -113,9 +142,10 @@ async def get_mask(
         PNG file with ``Content-Type: image/png``.
 
     Raises:
+        HTTPException 403: Caller does not own the job.
         HTTPException 404: Image result or mask not found.
     """
-    row = await _get_image_result(image_result_id, db)
+    row = await _get_image_result(image_result_id, db, current_user)
     path = _resolve_file(row.mask_path, "Mask")
     return FileResponse(
         path=str(path),

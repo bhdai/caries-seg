@@ -8,6 +8,8 @@ tables are visible before the metadata is inspected.
 
 from app.models.job import Job, JobStatus, ModelArch, PipelineType
 from app.models.image_result import ImageResult
+from app.models.user import User, UserRole
+from app.models.oauth_account import OAuthAccount
 
 __all__ = [
     "Job",
@@ -15,4 +17,7 @@ __all__ = [
     "ModelArch",
     "PipelineType",
     "ImageResult",
+    "User",
+    "UserRole",
+    "OAuthAccount",
 ]
