@@ -11,6 +11,10 @@ Covered endpoints:
   PATCH  /api/admin/users/{id}      — admin: update role / reset password
   DELETE /api/admin/users/{id}      — admin: delete user
 
+  GET  /api/auth/google             — redirect to Google consent screen
+  GET  /api/auth/google/callback    — exchange code, set cookie or error redirect
+  POST /api/auth/link-google        — link current user to Google identity
+
 Auth-guard tests (401 / 403 when calling protected routes without valid auth)
 are also covered here to avoid duplicating them in every other test module.
 """
@@ -18,10 +22,14 @@ are also covered here to avoid duplicating them in every other test module.
 from __future__ import annotations
 
 import uuid
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import jwt as pyjwt
 import pytest
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
+from app.core.config import get_settings
 from tests.conftest import _TEST_ADMIN_PASSWORD, _TEST_USER_PASSWORD
 
 pytestmark = pytest.mark.asyncio
@@ -462,3 +470,410 @@ async def test_full_login_me_logout_flow(
     # 4. /me with no valid cookie → 401.
     me_after = await client.get("/api/auth/me")
     assert me_after.status_code == 401
+
+
+# ===========================================================================
+# Phase 2 — Google OAuth2
+# ===========================================================================
+#
+# All tests that exercise the Google OAuth endpoints either:
+#   a) need `google_settings` to configure GOOGLE_CLIENT_ID etc., or
+#   b) test the "not configured" path and deliberately omit that fixture.
+#
+# httpx calls to Google's token endpoint are intercepted by patching
+# `httpx.AsyncClient` inside the auth routes module so no real network
+# traffic is generated.
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# Shared helpers
+# ---------------------------------------------------------------------------
+
+_GOOGLE_CLIENT_ID = "test-google-client-id.apps.googleusercontent.com"
+_GOOGLE_CLIENT_SECRET = "test-google-client-secret"
+_GOOGLE_REDIRECT_URI = "http://localhost:8000/api/auth/google/callback"
+
+# A fake Google `sub` that consistently identifies a test Google identity
+# across callback and link-google tests.
+_GOOGLE_SUB = "google-sub-0000001"
+
+
+def _make_fake_id_token(sub: str = _GOOGLE_SUB) -> str:
+    """Encode a minimal JWT that mimics a Google id_token.
+
+    The token is signed with HS256 only so it can be created without an RSA
+    key.  The callback/link-google handlers decode it with
+    ``verify_signature=False`` (token is received directly from Google over
+    HTTPS), so the algorithm does not matter for correctness tests.
+    """
+    return pyjwt.encode({"sub": sub}, "fake-secret", algorithm="HS256")
+
+
+def _make_google_token_response(sub: str = _GOOGLE_SUB) -> dict:
+    """Build a fake JSON body matching Google's token endpoint response."""
+    return {
+        "access_token": "fake-access-token",
+        "id_token": _make_fake_id_token(sub),
+        "token_type": "Bearer",
+        "expires_in": 3600,
+    }
+
+
+class _FakeHttpxClient:
+    """Minimal async context manager that stubs out httpx.AsyncClient.
+
+    The ``post`` method returns a mock whose ``.json()`` yields ``json_data``
+    and whose ``.raise_for_status()`` is a no-op (simulating a 200 response).
+
+    Pass ``raise_on_post=True`` to simulate a network error.
+    """
+
+    def __init__(self, json_data: dict, raise_on_post: bool = False) -> None:
+        self._json = json_data
+        self._raise = raise_on_post
+
+    async def __aenter__(self) -> "_FakeHttpxClient":
+        return self
+
+    async def __aexit__(self, *args: object) -> None:
+        pass
+
+    async def post(self, *args: object, **kwargs: object) -> MagicMock:
+        import httpx
+
+        if self._raise:
+            raise httpx.ConnectError("simulated network error")
+        resp = MagicMock()
+        resp.json.return_value = self._json
+        resp.raise_for_status = MagicMock()
+        return resp
+
+
+@pytest.fixture
+def google_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Inject Google OAuth env vars and invalidate the settings cache.
+
+    Fixtures that need the Google OAuth routes to be active should declare
+    this as a dependency.  The settings cache is cleared on teardown so
+    subsequent tests start fresh.
+    """
+    monkeypatch.setenv("GOOGLE_CLIENT_ID", _GOOGLE_CLIENT_ID)
+    monkeypatch.setenv("GOOGLE_CLIENT_SECRET", _GOOGLE_CLIENT_SECRET)
+    monkeypatch.setenv("GOOGLE_REDIRECT_URI", _GOOGLE_REDIRECT_URI)
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
+# ---------------------------------------------------------------------------
+# GET /api/auth/google
+# ---------------------------------------------------------------------------
+
+
+async def test_google_login_not_configured(client: AsyncClient) -> None:
+    """Without Google OAuth env vars, the endpoint returns 404."""
+    resp = await client.get("/api/auth/google", follow_redirects=False)
+    assert resp.status_code == 404
+    assert "not configured" in resp.json()["detail"].lower()
+
+
+async def test_google_login_redirects_to_google(
+    client: AsyncClient, google_settings: None
+) -> None:
+    """With Google OAuth configured, the endpoint 302-redirects to Google."""
+    resp = await client.get("/api/auth/google", follow_redirects=False)
+    assert resp.status_code == 307 or resp.status_code == 302
+
+    location = resp.headers["location"]
+    assert "accounts.google.com" in location
+    assert "response_type=code" in location
+    assert "scope=openid" in location
+
+    # A CSRF state cookie must be set so the callback can validate it.
+    assert "oauth_state" in resp.cookies
+
+
+# ---------------------------------------------------------------------------
+# GET /api/auth/google/callback
+# ---------------------------------------------------------------------------
+
+
+async def test_google_callback_not_configured(client: AsyncClient) -> None:
+    """Without Google OAuth env vars, the callback endpoint returns 404."""
+    resp = await client.get(
+        "/api/auth/google/callback?code=x&state=y",
+        follow_redirects=False,
+    )
+    assert resp.status_code == 404
+
+
+async def test_google_callback_user_denied(
+    client: AsyncClient, google_settings: None
+) -> None:
+    """When Google reports an error (user denied consent), redirect to /login."""
+    # Seed a valid state cookie so the error short-circuits before state check.
+    client.cookies.set("oauth_state", "test-state")
+    resp = await client.get(
+        "/api/auth/google/callback?error=access_denied&state=test-state",
+        follow_redirects=False,
+    )
+    assert resp.status_code in (302, 307)
+    assert resp.headers["location"] == "/login?error=google_denied"
+
+
+async def test_google_callback_invalid_state(
+    client: AsyncClient, google_settings: None
+) -> None:
+    """A state mismatch (CSRF attempt) redirects to /login?error=invalid_state."""
+    # Set a different state in the cookie vs the query param.
+    client.cookies.set("oauth_state", "correct-state")
+    resp = await client.get(
+        "/api/auth/google/callback?code=abc&state=tampered-state",
+        follow_redirects=False,
+    )
+    assert resp.status_code in (302, 307)
+    assert resp.headers["location"] == "/login?error=invalid_state"
+
+
+async def test_google_callback_missing_state_cookie(
+    client: AsyncClient, google_settings: None
+) -> None:
+    """If the state cookie is missing entirely, redirect with invalid_state."""
+    # No cookie set at all.
+    resp = await client.get(
+        "/api/auth/google/callback?code=abc&state=any",
+        follow_redirects=False,
+    )
+    assert resp.status_code in (302, 307)
+    assert resp.headers["location"] == "/login?error=invalid_state"
+
+
+async def test_google_callback_account_not_linked(
+    client: AsyncClient, google_settings: None
+) -> None:
+    """A valid Google login for an unregistered sub redirects to google_not_linked."""
+    client.cookies.set("oauth_state", "test-state")
+
+    fake_token_body = _make_google_token_response()
+    with patch(
+        "app.api.routes.auth.httpx.AsyncClient",
+        return_value=_FakeHttpxClient(fake_token_body),
+    ):
+        resp = await client.get(
+            "/api/auth/google/callback?code=valid-code&state=test-state",
+            follow_redirects=False,
+        )
+
+    assert resp.status_code in (302, 307)
+    assert resp.headers["location"] == "/login?error=google_not_linked"
+
+
+async def test_google_callback_linked_account_logs_in(
+    client: AsyncClient,
+    google_settings: None,
+    test_user,
+    database_url: str,
+) -> None:
+    """A Google identity linked to a user sets the JWT cookie and redirects to /."""
+    # Create the OAuthAccount row linking test_user to the fake Google sub.
+    engine = create_async_engine(database_url)
+    async with AsyncSession(engine, expire_on_commit=False) as session:
+        from app.models.oauth_account import OAuthAccount
+
+        link = OAuthAccount(
+            user_id=test_user.id,
+            provider="google",
+            provider_account_id=_GOOGLE_SUB,
+        )
+        session.add(link)
+        await session.commit()
+    await engine.dispose()
+
+    client.cookies.set("oauth_state", "test-state")
+
+    fake_token_body = _make_google_token_response()
+    with patch(
+        "app.api.routes.auth.httpx.AsyncClient",
+        return_value=_FakeHttpxClient(fake_token_body),
+    ):
+        resp = await client.get(
+            "/api/auth/google/callback?code=valid-code&state=test-state",
+            follow_redirects=False,
+        )
+
+    assert resp.status_code in (302, 307)
+    assert resp.headers["location"] == "/"
+    # JWT cookie must be issued so the frontend can call /api/auth/me.
+    assert "access_token" in resp.cookies
+    # The one-time state cookie must be cleared.
+    assert resp.cookies.get("oauth_state") != "test-state" or "oauth_state" not in resp.cookies
+
+
+async def test_google_callback_token_exchange_failure(
+    client: AsyncClient, google_settings: None
+) -> None:
+    """A network error during code exchange redirects to /login?error=google_denied."""
+    client.cookies.set("oauth_state", "test-state")
+
+    with patch(
+        "app.api.routes.auth.httpx.AsyncClient",
+        return_value=_FakeHttpxClient({}, raise_on_post=True),
+    ):
+        resp = await client.get(
+            "/api/auth/google/callback?code=bad-code&state=test-state",
+            follow_redirects=False,
+        )
+
+    assert resp.status_code in (302, 307)
+    assert resp.headers["location"] == "/login?error=google_denied"
+
+
+# ---------------------------------------------------------------------------
+# POST /api/auth/link-google
+# ---------------------------------------------------------------------------
+
+
+async def test_link_google_not_configured(
+    client: AsyncClient, user_override
+) -> None:
+    """Without Google OAuth configured, link-google returns 404."""
+    resp = await client.post(
+        "/api/auth/link-google",
+        json={"code": "any", "redirect_uri": "http://localhost/cb"},
+    )
+    assert resp.status_code == 404
+
+
+async def test_link_google_success(
+    client: AsyncClient,
+    google_settings: None,
+    user_override,
+    test_user,
+    database_url: str,
+) -> None:
+    """Linking a new Google identity creates an OAuthAccount row."""
+    from sqlalchemy import select
+
+    from app.models.oauth_account import OAuthAccount
+
+    fake_token_body = _make_google_token_response()
+    with patch(
+        "app.api.routes.auth.httpx.AsyncClient",
+        return_value=_FakeHttpxClient(fake_token_body),
+    ):
+        resp = await client.post(
+            "/api/auth/link-google",
+            json={"code": "valid-code", "redirect_uri": _GOOGLE_REDIRECT_URI},
+        )
+
+    assert resp.status_code == 200, resp.text
+    assert "linked" in resp.json()["message"].lower()
+
+    # Verify the row was created in the database.
+    engine = create_async_engine(database_url)
+    async with AsyncSession(engine) as session:
+        result = await session.execute(
+            select(OAuthAccount).where(
+                OAuthAccount.user_id == test_user.id,
+                OAuthAccount.provider == "google",
+                OAuthAccount.provider_account_id == _GOOGLE_SUB,
+            )
+        )
+        account = result.scalar_one_or_none()
+    await engine.dispose()
+    assert account is not None
+
+
+async def test_link_google_idempotent(
+    client: AsyncClient,
+    google_settings: None,
+    user_override,
+    test_user,
+    database_url: str,
+) -> None:
+    """Linking the same Google identity twice for the same user returns 200 (idempotent)."""
+    # Pre-create the link.
+    engine = create_async_engine(database_url)
+    async with AsyncSession(engine, expire_on_commit=False) as session:
+        from app.models.oauth_account import OAuthAccount
+
+        link = OAuthAccount(
+            user_id=test_user.id,
+            provider="google",
+            provider_account_id=_GOOGLE_SUB,
+        )
+        session.add(link)
+        await session.commit()
+    await engine.dispose()
+
+    fake_token_body = _make_google_token_response()
+    with patch(
+        "app.api.routes.auth.httpx.AsyncClient",
+        return_value=_FakeHttpxClient(fake_token_body),
+    ):
+        resp = await client.post(
+            "/api/auth/link-google",
+            json={"code": "any-code", "redirect_uri": _GOOGLE_REDIRECT_URI},
+        )
+
+    assert resp.status_code == 200
+    assert "already linked" in resp.json()["message"].lower()
+
+
+async def test_link_google_duplicate_different_user(
+    client: AsyncClient,
+    google_settings: None,
+    user_override,
+    test_user,
+    database_url: str,
+) -> None:
+    """409 is returned when the Google identity is already linked to a different user."""
+    # Create a second user and link the Google sub to them.
+    engine = create_async_engine(database_url)
+    async with AsyncSession(engine, expire_on_commit=False) as session:
+        from app.core.security import hash_password
+        from app.models.oauth_account import OAuthAccount
+        from app.models.user import User
+
+        other_user = User(
+            username="otheruser",
+            password_hash=hash_password("OtherPass1!"),
+            role="user",
+            must_change_pw=False,
+        )
+        session.add(other_user)
+        await session.flush()  # populate other_user.id
+
+        link = OAuthAccount(
+            user_id=other_user.id,
+            provider="google",
+            provider_account_id=_GOOGLE_SUB,
+        )
+        session.add(link)
+        await session.commit()
+    await engine.dispose()
+
+    # Now test_user (via user_override) tries to claim the same Google identity.
+    fake_token_body = _make_google_token_response()
+    with patch(
+        "app.api.routes.auth.httpx.AsyncClient",
+        return_value=_FakeHttpxClient(fake_token_body),
+    ):
+        resp = await client.post(
+            "/api/auth/link-google",
+            json={"code": "any-code", "redirect_uri": _GOOGLE_REDIRECT_URI},
+        )
+
+    assert resp.status_code == 409
+    assert "another user" in resp.json()["detail"].lower()
+
+
+async def test_link_google_requires_auth(
+    client: AsyncClient, google_settings: None
+) -> None:
+    """Without authentication, link-google returns 401."""
+    resp = await client.post(
+        "/api/auth/link-google",
+        json={"code": "any", "redirect_uri": _GOOGLE_REDIRECT_URI},
+    )
+    assert resp.status_code == 401

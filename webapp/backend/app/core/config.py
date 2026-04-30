@@ -92,6 +92,19 @@ class Settings(BaseSettings):
     SEED_ADMIN_PASSWORD: Optional[str] = None
 
     # ------------------------------------------------------------------
+    # Google OAuth2
+    # ------------------------------------------------------------------
+    # All three vars are optional.  When GOOGLE_CLIENT_ID is None the
+    # /api/auth/google and /api/auth/google/callback endpoints return 404
+    # so deployments without Google OAuth are unaffected.
+    GOOGLE_CLIENT_ID: Optional[str] = None
+    GOOGLE_CLIENT_SECRET: Optional[str] = None
+    # Full URL that Google will redirect back to after user consent, e.g.
+    # "http://localhost:8000/api/auth/google/callback" for local dev or
+    # "https://example.com/api/auth/google/callback" in production.
+    GOOGLE_REDIRECT_URI: Optional[str] = None
+
+    # ------------------------------------------------------------------
     # Validators
     # ------------------------------------------------------------------
     @field_validator("DEVICE")
