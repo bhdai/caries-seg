@@ -33,6 +33,7 @@ from app.core.database import get_session_factory
 from app.core.storage import StorageError, save_display_copy, save_upload
 from app.models.image_result import ImageResult
 from app.models.job import Job, JobStatus
+from app.models.user import User
 from app.schemas.job import JobResponse
 from app.schemas.job_history import JobListQuery, JobSummaryResponse, JobsPageResponse
 
@@ -66,16 +67,20 @@ def touch_job_activity(job: Job, when: datetime | None = None) -> None:
 # ---------------------------------------------------------------------------
 
 
-async def list_jobs(query: JobListQuery, db: AsyncSession) -> JobsPageResponse:
+async def list_jobs(query: JobListQuery, db: AsyncSession, user: User) -> JobsPageResponse:
     """Execute the canonical history query.
 
     Apply filters, search, stable sorting, and pagination against jobs-first
     records; aggregate lightweight filename preview data; and return a compact
     page model for dashboard/history consumers.
 
+    Non-admin users see only jobs they own.  Admins see everything, including
+    orphaned jobs whose owner was deleted (owner_id=None).
+
     Args:
         query: Normalized filter, sort, and pagination parameters.
         db: Active async database session.
+        user: The requesting user (controls ownership filter).
 
     Returns:
         A single page of job summaries with pagination metadata.
@@ -88,6 +93,11 @@ async def list_jobs(query: JobListQuery, db: AsyncSession) -> JobsPageResponse:
     # without duplicating filter logic.
     # ==============================================================================
     filters = []
+
+    # Non-admin users see only their own jobs.  Admins see all jobs including
+    # orphans (owner_id=None, i.e. the original owner account was deleted).
+    if user.role != "admin":
+        filters.append(Job.owner_id == user.id)
 
     if query.status != "all":
         filters.append(Job.status == query.status)
@@ -211,7 +221,7 @@ def _job_to_summary(job: Job) -> JobSummaryResponse:
 # ---------------------------------------------------------------------------
 
 
-async def delete_job(job_id: uuid.UUID, db: AsyncSession) -> None:
+async def delete_job(job_id: uuid.UUID, db: AsyncSession, user: User) -> None:
     """Permanently delete a job and its associated on-disk files.
 
     Image result rows are cascade-deleted by the database (configured on the
@@ -223,8 +233,10 @@ async def delete_job(job_id: uuid.UUID, db: AsyncSession) -> None:
     Args:
         job_id: UUID of the job to delete.
         db: Active async database session.
+        user: The requesting user; non-admin must own the job.
 
     Raises:
+        HTTPException 403: Caller does not own the job.
         HTTPException 404: No job with the given ID exists.
     """
     import logging as _logging
@@ -235,6 +247,12 @@ async def delete_job(job_id: uuid.UUID, db: AsyncSession) -> None:
     job = result.scalar_one_or_none()
     if job is None:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found.")
+
+    # Non-admin users may only delete their own jobs.  Orphaned jobs
+    # (owner_id=None) are treated as belonging to no one and can only be
+    # removed by an admin.
+    if user.role != "admin" and job.owner_id != user.id:
+        raise HTTPException(status_code=403, detail="Access denied.")
 
     # Collect every on-disk path before deleting the ORM rows so we still
     # have the path strings after the database commit clears them.
@@ -266,6 +284,7 @@ async def rerun_job(
     db: AsyncSession,
     settings: Settings,
     background_tasks: BackgroundTasks,
+    user: User,
 ) -> JobResponse:
     """Create a new pending job from a prior job's stored uploads.
 
@@ -279,11 +298,13 @@ async def rerun_job(
         settings: Application settings (provides ``STORAGE_ROOT``).
         background_tasks: FastAPI background task queue; used to enqueue
             the inference worker after the new job is committed.
+        user: The requesting user; non-admin must own the source job.
 
     Returns:
         Full ``JobResponse`` for the newly created pending job.
 
     Raises:
+        HTTPException 403: Caller does not own the source job.
         HTTPException 404: Source job does not exist.
         HTTPException 409: Source job has no image results, or one or more
             upload files are no longer present on disk.
@@ -302,6 +323,12 @@ async def rerun_job(
             status_code=404,
             detail=f"Job {source_job_id} not found.",
         )
+
+    # Non-admin users may only rerun their own jobs.  Orphaned jobs can only
+    # be rerun by an admin; if rerun the new job is stamped with the admin's
+    # user id as the new owner.
+    if user.role != "admin" and source_job.owner_id != user.id:
+        raise HTTPException(status_code=403, detail="Access denied.")
 
     # The Job model uses lazy="selectin" so image_results are already populated
     # after the select above.
@@ -337,6 +364,10 @@ async def rerun_job(
         status=JobStatus.pending,
         pipeline_type=source_job.pipeline_type,
         model_arch=source_job.model_arch,
+        # The new job is owned by the requesting user.  For a regular user this
+        # will always equal source_job.owner_id (ownership check above).  For
+        # an admin rerunning an orphaned job the new job gains a new owner.
+        owner_id=user.id,
     )
     db.add(new_job)
 

@@ -1,42 +1,82 @@
+import { AuthProvider } from "@/context/AuthContext";
 import { UploadStoreProvider } from "@/context/UploadStore";
+import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { AppShell } from "@/components/layout/AppShell";
+import { AdminUsersPage } from "@/pages/AdminUsersPage";
 import ConfigPage from "@/pages/ConfigPage";
 import DashboardPage from "@/pages/DashboardPage";
 import HistoryPage from "@/pages/HistoryPage";
 import ResultPage from "@/pages/ResultPage";
 import UploadPage from "@/pages/UploadPage";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { LoginPage } from "@/pages/LoginPage";
+import { ChangePasswordPage } from "@/pages/ChangePasswordPage";
+import { GoogleLinkCallbackPage } from "@/pages/GoogleLinkCallbackPage";
+import { BrowserRouter, Navigate, Outlet, Route, Routes } from "react-router-dom";
 
 /**
  * Application root.
  *
- * Routes:
- *   /              → DashboardPage (home, recent jobs, quick actions)
- *   /upload        → UploadPage    (file selection — step 1)
- *   /config        → ConfigPage    (pipeline + model selection — step 2)
- *   /result/:jobId → ResultPage    (polling + overlay viewer — step 3)
- *   /history       → HistoryPage   (full job list with filters and pagination)
- *   *              → redirect to /
+ * Route tree:
+ *   /login             → LoginPage        (public, no AppShell)
+ *   /change-password   → ChangePasswordPage (protected, no AppShell)
+ *   /                  → DashboardPage    (protected, inside AppShell)
+ *   /upload            → UploadPage       (protected, inside AppShell)
+ *   /config            → ConfigPage       (protected, inside AppShell)
+ *   /result/:jobId     → ResultPage       (protected, inside AppShell)
+ *   /history           → HistoryPage      (protected, inside AppShell)
+ *   *                  → redirect to /
  *
- * All routes are wrapped in AppShell, which provides the shared navigation
- * bar and page container.  UploadStoreProvider wraps the whole tree so the
- * upload-to-config file handoff context is available everywhere.
+ * AuthProvider is the outermost wrapper so auth state is available to all
+ * components including ProtectedRoute. UploadStoreProvider stays inside
+ * BrowserRouter so its reset helper can be called from navigation hooks.
+ *
+ * Layout routes (pathless <Route element={...}>) group routes that share
+ * the same chrome — ProtectedRoute + AppShell for product pages —
+ * without repeating those wrappers on every individual route.
  */
 export default function App() {
   return (
-    <UploadStoreProvider>
-      <BrowserRouter>
-        <AppShell>
+    <AuthProvider>
+      <UploadStoreProvider>
+        <BrowserRouter>
           <Routes>
-            <Route path="/" element={<DashboardPage />} />
-            <Route path="/upload" element={<UploadPage />} />
-            <Route path="/config" element={<ConfigPage />} />
-            <Route path="/result/:jobId" element={<ResultPage />} />
-            <Route path="/history" element={<HistoryPage />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
+            {/* Public route — no auth required, no nav bar */}
+            <Route path="/login" element={<LoginPage />} />
+
+            {/* Popup callback for Google account linking — public, no AppShell */}
+            <Route path="/auth/google/link-callback" element={<GoogleLinkCallbackPage />} />
+
+            {/* Forced password-change — authenticated but no AppShell */}
+            <Route
+              path="/change-password"
+              element={
+                <ProtectedRoute>
+                  <ChangePasswordPage />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* All product routes share ProtectedRoute + AppShell */}
+            <Route
+              element={
+                <ProtectedRoute>
+                  <AppShell>
+                    <Outlet />
+                  </AppShell>
+                </ProtectedRoute>
+              }
+            >
+              <Route path="/" element={<DashboardPage />} />
+              <Route path="/upload" element={<UploadPage />} />
+              <Route path="/config" element={<ConfigPage />} />
+              <Route path="/result/:jobId" element={<ResultPage />} />
+              <Route path="/history" element={<HistoryPage />} />
+              <Route path="/admin/users" element={<AdminUsersPage />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Route>
           </Routes>
-        </AppShell>
-      </BrowserRouter>
-    </UploadStoreProvider>
+        </BrowserRouter>
+      </UploadStoreProvider>
+    </AuthProvider>
   );
 }

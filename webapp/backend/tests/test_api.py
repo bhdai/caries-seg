@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 import app.api.routes.jobs as jobs_routes
 
-pytestmark = pytest.mark.asyncio
+pytestmark = [pytest.mark.asyncio, pytest.mark.usefixtures("user_override")]
 
 
 # ---------------------------------------------------------------------------

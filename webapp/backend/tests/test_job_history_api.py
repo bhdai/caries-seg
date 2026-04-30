@@ -14,7 +14,7 @@ import numpy as np
 import pytest
 from httpx import AsyncClient
 
-pytestmark = pytest.mark.asyncio
+pytestmark = [pytest.mark.asyncio, pytest.mark.usefixtures("user_override")]
 
 
 # ---------------------------------------------------------------------------

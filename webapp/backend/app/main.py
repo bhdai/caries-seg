@@ -15,17 +15,22 @@ Phase 3 additions:
 
 from __future__ import annotations
 
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import update
+from sqlalchemy import func, select, update
 
 from app.core.config import get_settings
 from app.core.database import get_session_factory, init_db
+from app.core.security import hash_password
 from app.inference.registry import init_registry
 from app.models.job import Job, JobStatus
+from app.models.user import User, UserRole
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -69,7 +74,66 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         )
         await session.commit()
 
+    # Seed the bootstrap admin account on fresh deployments.  The seed step
+    # runs only when BOTH seed vars are present AND the users table is empty,
+    # so existing deployments are never affected by a restart.
+    await _seed_admin(settings, session_factory)
+
     yield
+
+
+# ---------------------------------------------------------------------------
+# Seed helper
+# ---------------------------------------------------------------------------
+
+
+async def _seed_admin(settings, session_factory) -> None:  # type: ignore[type-arg]
+    """Insert a bootstrap admin account when the users table is empty.
+
+    The seed runs only when:
+    1. Both ``SEED_ADMIN_USERNAME`` and ``SEED_ADMIN_PASSWORD`` are set.
+    2. The ``users`` table currently contains zero rows.
+
+    This means the seed is a no-op on every restart after the first user
+    exists — whether that first user came from the seed itself or was
+    created via the admin API.  There is no risk of duplicate inserts even
+    if the same seed vars are kept in the environment indefinitely.
+
+    The admin account starts with ``must_change_pw=False`` because a
+    deployment owner who configured the seed vars already controls the
+    credential — forcing a change on first boot would just add friction
+    without security benefit.
+    """
+    if not settings.SEED_ADMIN_USERNAME or not settings.SEED_ADMIN_PASSWORD:
+        # Seed vars not configured; nothing to do.
+        return
+
+    async with session_factory() as session:
+        # Count existing users.  A single COUNT(*) is far cheaper than
+        # loading any rows and avoids loading the full User relationship graph.
+        count_result = await session.execute(select(func.count()).select_from(User))
+        user_count = count_result.scalar_one()
+
+        if user_count > 0:
+            # At least one user already exists; skip seeding to avoid
+            # creating a duplicate admin on every restart.
+            return
+
+        admin = User(
+            username=settings.SEED_ADMIN_USERNAME,
+            password_hash=hash_password(settings.SEED_ADMIN_PASSWORD),
+            role=UserRole.admin,
+            # The deployment owner configured these credentials intentionally,
+            # so we do not force an immediate password change.
+            must_change_pw=False,
+        )
+        session.add(admin)
+        await session.commit()
+
+    logger.info(
+        "Seeded bootstrap admin account: username=%r",
+        settings.SEED_ADMIN_USERNAME,
+    )
 
 
 def create_app() -> FastAPI:

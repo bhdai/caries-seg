@@ -16,3 +16,10 @@ tmp/
 files/
 Makefile.local
 wandb/
+
+# LaTeX temporary files
+*.aux
+*.log
+
+# Compiled PDF output
+*.pdf

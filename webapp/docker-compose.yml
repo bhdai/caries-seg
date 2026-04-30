@@ -40,6 +40,13 @@ services:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-caries}:${POSTGRES_PASSWORD:-caries}@postgres:5432/${POSTGRES_DB:-caries_seg}
       STORAGE_ROOT: /storage
       MODEL_ROOT: /models
+      # JWT_SECRET is required — no default forces a clear error if unset.
+      # Generate with: python -c "import secrets; print(secrets.token_hex(32))"
+      JWT_SECRET: ${JWT_SECRET}
+      # Optional bootstrap admin.  Both vars must be set for the seed to run.
+      # Remove after the initial deployment to prevent accidental re-seeding.
+      SEED_ADMIN_USERNAME: ${SEED_ADMIN_USERNAME:-}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
     volumes:
       # Uploaded images and generated masks persist across restarts.
       - storage_vol:/storage
