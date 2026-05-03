@@ -22,6 +22,8 @@ import math
 import uuid
 
 from fastapi import HTTPException, status
+
+from app.core.exceptions import AppError
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -82,8 +84,9 @@ async def create_user(body: CreateUserRequest, db: AsyncSession) -> User:
     # letting the unique-constraint violation bubble up as a 500.
     existing = await db.execute(select(User).where(User.username == body.username))
     if existing.scalar_one_or_none() is not None:
-        raise HTTPException(
+        raise AppError(
             status_code=status.HTTP_409_CONFLICT,
+            code="users.usernameExists",
             detail="Username already exists",
         )
 
@@ -153,8 +156,9 @@ async def update_user(
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if user is None:
-        raise HTTPException(
+        raise AppError(
             status_code=status.HTTP_404_NOT_FOUND,
+            code="users.notFound",
             detail="User not found",
         )
 
@@ -163,8 +167,9 @@ async def update_user(
     # single-admin deployment.
     if user.id == requesting_user.id:
         if body.role is not None and body.role != requesting_user.role:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+            raise AppError(
+                status_code=status.HTTP_403_FORBIDDEN,
+                code="users.selfRoleChange",
                 detail="Cannot change your own role",
             )
 
@@ -200,8 +205,9 @@ async def delete_user(
     # admin's account happened to not exist this path would still be 400, which
     # is the correct signal ("you cannot do this" vs. "target not found").
     if user_id == requesting_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+        raise AppError(
+            status_code=status.HTTP_403_FORBIDDEN,
+            code="users.selfDelete",
             detail="Cannot delete your own account",
         )
 

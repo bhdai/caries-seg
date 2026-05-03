@@ -1,3 +1,4 @@
+import { LanguageProvider } from "@/context/LanguageContext";
 import { AuthProvider } from "@/context/AuthContext";
 import { UploadStoreProvider } from "@/context/UploadStore";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
@@ -36,7 +37,8 @@ import { BrowserRouter, Navigate, Outlet, Route, Routes } from "react-router-dom
  */
 export default function App() {
   return (
-    <AuthProvider>
+    <LanguageProvider>
+      <AuthProvider>
       <UploadStoreProvider>
         <BrowserRouter>
           <Routes>
@@ -77,6 +79,7 @@ export default function App() {
           </Routes>
         </BrowserRouter>
       </UploadStoreProvider>
-    </AuthProvider>
+      </AuthProvider>
+    </LanguageProvider>
   );
 }

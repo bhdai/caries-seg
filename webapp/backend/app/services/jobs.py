@@ -25,6 +25,8 @@ from typing import TYPE_CHECKING
 import cv2
 import numpy as np
 from fastapi import BackgroundTasks, HTTPException
+
+from app.core.exceptions import AppError
 from sqlalchemy import String, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -246,13 +248,11 @@ async def delete_job(job_id: uuid.UUID, db: AsyncSession, user: User) -> None:
     result = await db.execute(select(Job).where(Job.id == job_id))
     job = result.scalar_one_or_none()
     if job is None:
-        raise HTTPException(status_code=404, detail=f"Job {job_id} not found.")
+        raise AppError(status_code=404, code="jobs.notFound", detail=f"Job {job_id} not found.")
 
-    # Non-admin users may only delete their own jobs.  Orphaned jobs
-    # (owner_id=None) are treated as belonging to no one and can only be
-    # removed by an admin.
+    # Non-admin users may only delete their own jobs.
     if user.role != "admin" and job.owner_id != user.id:
-        raise HTTPException(status_code=403, detail="Access denied.")
+        raise AppError(status_code=403, code="jobs.accessDenied", detail="Access denied.")
 
     # Collect every on-disk path before deleting the ORM rows so we still
     # have the path strings after the database commit clears them.
@@ -319,8 +319,9 @@ async def rerun_job(
     source_result = await db.execute(select(Job).where(Job.id == source_job_id))
     source_job = source_result.scalar_one_or_none()
     if source_job is None:
-        raise HTTPException(
+        raise AppError(
             status_code=404,
+            code="jobs.notFound",
             detail=f"Job {source_job_id} not found.",
         )
 
@@ -333,8 +334,9 @@ async def rerun_job(
     # The Job model uses lazy="selectin" so image_results are already populated
     # after the select above.
     if not source_job.image_results:
-        raise HTTPException(
+        raise AppError(
             status_code=409,
+            code="jobs.noImageResults",
             detail=f"Job {source_job_id} has no image results and cannot be rerun.",
         )
 
@@ -347,8 +349,9 @@ async def rerun_job(
     for ir in source_job.image_results:
         source_path = Path(ir.upload_path)
         if not source_path.is_file():
-            raise HTTPException(
+            raise AppError(
                 status_code=409,
+                code="jobs.sourceUnavailable",
                 detail=(
                     f"Source upload file for image {ir.original_filename!r} is no "
                     "longer available on disk. The job cannot be rerun."
@@ -414,8 +417,9 @@ async def rerun_job(
                 )
                 _written_files.append(new_upload_path)
             except (ValueError, StorageError) as exc:
-                raise HTTPException(
+                raise AppError(
                     status_code=500,
+                    code="jobs.rerunCopyFailed",
                     detail="Failed to copy uploaded files for rerun.",
                 ) from exc
 
@@ -440,8 +444,9 @@ async def rerun_job(
                 )
                 _written_files.append(new_display_path)
             except StorageError as exc:
-                raise HTTPException(
+                raise AppError(
                     status_code=500,
+                    code="jobs.rerunDisplayFailed",
                     detail="Failed to create display copy for rerun.",
                 ) from exc
 

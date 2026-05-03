@@ -18,6 +18,8 @@ import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
+
+from app.core.exceptions import AppError
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -54,8 +56,9 @@ async def _get_image_result(
     )
     row = result.one_or_none()
     if row is None:
-        raise HTTPException(
+        raise AppError(
             status_code=404,
+            code="files.notFound",
             detail=f"ImageResult {image_result_id} not found.",
         )
     image_result, job = row
@@ -63,7 +66,7 @@ async def _get_image_result(
     # Admins see all files; regular users see only their own jobs.  Orphaned
     # jobs (owner_id=None) are visible only to admins.
     if current_user.role != "admin" and job.owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Access denied.")
+        raise AppError(status_code=403, code="files.accessDenied", detail="Access denied.")
 
     return image_result
 
@@ -83,14 +86,16 @@ def _resolve_file(path_str: str | None, label: str) -> Path:
         HTTPException 404: Path is ``None`` or file does not exist on disk.
     """
     if path_str is None:
-        raise HTTPException(
-            status_code=404,
+        raise AppError(
+            status_code=409,
+            code="files.notReady",
             detail=f"{label} has not been produced yet for this image result.",
         )
     path = Path(path_str)
     if not path.exists():
-        raise HTTPException(
-            status_code=404,
+        raise AppError(
+            status_code=500,
+            code="files.missingOnDisk",
             detail=f"{label} file not found on disk.",
         )
     return path

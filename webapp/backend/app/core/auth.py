@@ -19,6 +19,8 @@ import uuid
 
 import jwt
 from fastapi import Depends, HTTPException, Request, status
+
+from app.core.exceptions import AppError
 from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -103,8 +105,9 @@ async def get_current_user(
 
     The returned User is injected into handlers via ``Depends(get_current_user)``.
     """
-    _401 = HTTPException(
+    _401 = AppError(
         status_code=status.HTTP_401_UNAUTHORIZED,
+        code="auth.notAuthenticated",
         detail="Not authenticated",
     )
 
@@ -147,8 +150,9 @@ async def require_admin(
     Returns the User on success.
     """
     if user.role != "admin":
-        raise HTTPException(
+        raise AppError(
             status_code=status.HTTP_403_FORBIDDEN,
+            code="auth.adminRequired",
             detail="Admin access required",
         )
     return user

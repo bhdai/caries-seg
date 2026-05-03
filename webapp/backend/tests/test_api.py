@@ -100,16 +100,22 @@ async def test_create_job_file_too_large(client: AsyncClient) -> None:
         files=[("files", ("big.png", big_bytes, "image/png"))],
     )
     assert response.status_code == 413
+    body = response.json()
+    assert "code" in body
+    assert body["code"] == "jobs.fileTooLarge"
 
 
 async def test_create_job_invalid_mime(client: AsyncClient) -> None:
-    """A file with a disallowed MIME type is rejected with 422."""
+    """A file with a disallowed MIME type is rejected with 415."""
     response = await client.post(
         "/api/jobs",
         data={"pipeline_type": "single_stage", "model_arch": "unet"},
         files=[("files", ("doc.pdf", b"%PDF-1.4", "application/pdf"))],
     )
-    assert response.status_code == 422
+    assert response.status_code == 415
+    body = response.json()
+    assert "code" in body
+    assert body["code"] == "jobs.invalidMime"
 
 
 async def test_create_job_corrupt_image(client: AsyncClient) -> None:
@@ -121,6 +127,9 @@ async def test_create_job_corrupt_image(client: AsyncClient) -> None:
         files=[("files", ("corrupt.png", b"\x89PNG\r\n" + b"\x00" * 94, "image/png"))],
     )
     assert response.status_code == 422
+    body = response.json()
+    assert "code" in body
+    assert body["code"] == "jobs.invalidImage"
 
 
 async def test_create_job_invalid_pipeline_type(client: AsyncClient) -> None:
@@ -228,6 +237,9 @@ async def test_get_job_not_found(client: AsyncClient) -> None:
     missing_id = uuid.uuid4()
     response = await client.get(f"/api/jobs/{missing_id}")
     assert response.status_code == 404
+    body = response.json()
+    assert "code" in body
+    assert body["code"] == "jobs.notFound"
 
 
 # ---------------------------------------------------------------------------
@@ -257,6 +269,9 @@ async def test_get_original_not_found(client: AsyncClient) -> None:
     missing_id = uuid.uuid4()
     response = await client.get(f"/api/files/{missing_id}/original")
     assert response.status_code == 404
+    body = response.json()
+    assert "code" in body
+    assert body["code"] == "files.notFound"
 
 
 # ---------------------------------------------------------------------------
@@ -265,7 +280,7 @@ async def test_get_original_not_found(client: AsyncClient) -> None:
 
 
 async def test_get_mask_not_produced_yet(client: AsyncClient) -> None:
-    """The mask endpoint returns 404 when inference has not produced a mask yet."""
+    """The mask endpoint returns 409 when inference has not produced a mask yet."""
     png_bytes = _make_png_bytes()
     create_resp = await client.post(
         "/api/jobs",
@@ -277,4 +292,7 @@ async def test_get_mask_not_produced_yet(client: AsyncClient) -> None:
 
     mask_resp = await client.get(f"/api/files/{result_id}/mask")
     # mask_path is None until Phase 3 inference runs.
-    assert mask_resp.status_code == 404
+    assert mask_resp.status_code == 409
+    body = mask_resp.json()
+    assert "code" in body
+    assert body["code"] == "files.notReady"

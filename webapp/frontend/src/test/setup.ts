@@ -1,3 +1,4 @@
+/// <reference types="vitest/globals" />
 /**
  * Vitest global setup — extends expect with @testing-library/jest-dom matchers.
  *
@@ -27,3 +28,16 @@ window.HTMLElement.prototype.releasePointerCapture = () => {};
 // tests because layout/scroll are not under test.
 // ---------------------------------------------------------------------------
 window.Element.prototype.scrollIntoView = () => {};
+
+// ---------------------------------------------------------------------------
+// i18n — use English for all component tests
+//
+// Phase 2 sets the default language to Vietnamese, but tests assert English
+// strings.  Switching to 'en' before the suite runs avoids brittle test
+// failures caused by locale-dependent text output.
+// ---------------------------------------------------------------------------
+import i18n from '@/i18n';
+
+beforeAll(async () => {
+  await i18n.changeLanguage('en');
+});

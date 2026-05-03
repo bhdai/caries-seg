@@ -1,5 +1,8 @@
 ## Deferred Notes
 
+- The `google_settings` pytest fixture uses `monkeypatch.setenv` but does not set `GOOGLE_LINK_REDIRECT_URI`; `test_link_google_*` tests rely on the value being present in `.env`. Tests would fail in a CI environment without a `.env` file — consider adding `GOOGLE_LINK_REDIRECT_URI` to the fixture.
+- The `google_callback` tests were written expecting relative redirect paths (`/login?...`) but the backend always returns absolute URLs using `settings.FRONTEND_URL`; the assertions were updated to use full URLs, but this coupling to a hardcoded default is fragile if `FRONTEND_URL` is overridden in tests.
+
 - The "Link Google Account" popup flow requires `GOOGLE_LINK_REDIRECT_URI` (`http://localhost:5173/auth/google/link-callback` in dev) to be registered as an authorised redirect URI in Google Cloud Console alongside `GOOGLE_REDIRECT_URI`; the env var is set in `.env` but Google Console registration must be done manually.
 - The extracted benchmark paper description does not fully match the shipped reference repo code: loss, augmentation, batch-size, and checkpoint-selection details appear to differ and should be reconciled before treating the paper numbers as a strict reproduction target.
 - The local training workflow loads the test split but only reports validation metrics; add a dedicated local test evaluation entrypoint so benchmark comparisons do not rely on validation logs.

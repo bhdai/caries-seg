@@ -41,8 +41,12 @@ export async function apiFetch(
   const res = await fetch(input, mergedInit);
   if (!res.ok) {
     let message = `HTTP ${res.status}`;
+    let code: string | undefined;
     try {
-      const body = (await res.json()) as { detail?: unknown };
+      const body = (await res.json()) as { detail?: unknown; code?: string };
+      // Extract the machine-readable error code introduced by AppError on the
+      // backend.  Absent for generic FastAPI / middleware errors.
+      code = body.code;
       if (typeof body.detail === "string") {
         message = body.detail;
       } else if (body.detail !== undefined) {
@@ -58,7 +62,7 @@ export async function apiFetch(
       window.dispatchEvent(new Event("auth:unauthorized"));
     }
 
-    throw new ApiError(res.status, message);
+    throw new ApiError(res.status, message, code);
   }
   return res;
 }
