@@ -38,19 +38,19 @@ export interface ResultImagePlaceholderCardProps {
   errorMessage: string | null;
 }
 
-// Human-readable labels per phase.
-const PHASE_LABELS: Record<PlaceholderPhase, string> = {
-  pending: "Waiting to start…",
-  processing: "Running inference…",
-  failed: "Output unavailable",
-};
-
-// Secondary description shown inside the placeholder body.
-const PHASE_DESCRIPTIONS: Record<PlaceholderPhase, string> = {
-  pending: "This image is queued and will be processed shortly.",
-  processing: "Inference is running. The result will appear here once complete.",
-  failed: "Inference did not produce output for this image.",
-};
+// // Human-readable labels per phase.
+// const PHASE_LABELS: Record<PlaceholderPhase, string> = {
+//   pending: "Waiting to start…",
+//   processing: "Running inference…",
+//   failed: "Output unavailable",
+// };
+//
+// // Secondary description shown inside the placeholder body.
+// const PHASE_DESCRIPTIONS: Record<PlaceholderPhase, string> = {
+//   pending: "This image is queued and will be processed shortly.",
+//   processing: "Inference is running. The result will appear here once complete.",
+//   failed: "Inference did not produce output for this image.",
+// };
 
 /**
  * Render a size-stable placeholder card for a not-ready image result.
@@ -116,10 +116,18 @@ export function ResultImagePlaceholderCard({
               />
               <div className="text-center space-y-1 px-4">
                 <p className="text-sm font-medium text-muted-foreground">
-                  {t(`imagePlaceholder.${phase}.label` as Parameters<typeof t>[0])}
+                  {t(
+                    `imagePlaceholder.${phase}.label` as Parameters<
+                      typeof t
+                    >[0],
+                  )}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {t(`imagePlaceholder.${phase}.description` as Parameters<typeof t>[0])}
+                  {t(
+                    `imagePlaceholder.${phase}.description` as Parameters<
+                      typeof t
+                    >[0],
+                  )}
                 </p>
               </div>
             </>

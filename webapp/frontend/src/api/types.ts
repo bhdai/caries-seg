@@ -54,6 +54,10 @@ export interface JobDetail {
   created_at: string;
   updated_at: string;
   image_results: ImageResultResponse[];
+  /** UUID of the linked patient, or null when the job is not linked. */
+  patient_id: string | null;
+  /** Display name of the linked patient, or null when unlinked. */
+  patient_name: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -75,6 +79,10 @@ export interface JobSummary {
   primary_filename: string;
   filename_preview: string[];
   error_message: string | null;
+  /** UUID of the linked patient, or null when the job is not linked. */
+  patient_id: string | null;
+  /** Display name of the linked patient, or null when unlinked. */
+  patient_name: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -112,6 +120,8 @@ export interface JobFilters {
   modelArch: "all" | ModelArch;
   search: string;
   sort: "newest" | "oldest" | "last_activity_desc";
+  /** When set, filters jobs to this patient UUID only. */
+  patientId: string | null;
 }
 
 // ---------------------------------------------------------------------------

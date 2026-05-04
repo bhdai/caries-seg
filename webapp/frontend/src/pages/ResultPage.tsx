@@ -37,15 +37,17 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { useJobDetailQuery } from "@/hooks/useJobDetailQuery";
+import { useJobDetailQuery, jobDetailQueryKeys } from "@/hooks/useJobDetailQuery";
 import { useStartNewJob } from "@/hooks/useStartNewJob";
 import {
   exportReadyResultsZip,
   exportSingleResultPng,
 } from "@/lib/resultExport";
+import { PatientLinkModal } from "@/components/patients/PatientLinkModal";
+import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useRef, useState } from "react";
+import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
-import { useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
 export default function ResultPage() {
@@ -54,6 +56,10 @@ export default function ResultPage() {
   const { t } = useTranslation();
 
   const { data: job, error } = useJobDetailQuery(jobId);
+  const queryClient = useQueryClient();
+
+  // Link-patient modal state
+  const [linkModalOpen, setLinkModalOpen] = useState(false);
 
   const fetchError =
     error instanceof Error ? error.message : error ? "Failed to fetch job." : null;
@@ -262,6 +268,37 @@ export default function ResultPage() {
       </div>
 
       {/* ------------------------------------------------------------------ */}
+      {/* Patient association — link or show linked patient                   */}
+      {/* ------------------------------------------------------------------ */}
+      {job && (
+        <div className="flex items-center gap-2 text-sm">
+          <span className="text-muted-foreground font-medium">
+            {t("result.patientLabel")}:
+          </span>
+          {job.patient_id && job.patient_name ? (
+            <Link
+              to={`/patients/${job.patient_id}`}
+              className="hover:underline underline-offset-4 font-medium"
+            >
+              {job.patient_name}
+            </Link>
+          ) : (
+            <>
+              <span className="text-muted-foreground">—</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-auto py-0.5 px-2"
+                onClick={() => setLinkModalOpen(true)}
+              >
+                {t("result.patientLink")}
+              </Button>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------------ */}
       {/* Fetch error — shown when the network request itself fails            */}
       {/* ------------------------------------------------------------------ */}
       {fetchError && (
@@ -372,6 +409,22 @@ export default function ResultPage() {
             );
           })}
         </div>
+      )}
+
+      {/* Patient link modal — opened when user clicks "Link" on an unlinked job */}
+      {job && (
+        <PatientLinkModal
+          open={linkModalOpen}
+          onOpenChange={setLinkModalOpen}
+          jobId={job.id}
+          currentPatientId={job.patient_id}
+          currentPatientName={job.patient_name}
+          onLinked={() => {
+            void queryClient.invalidateQueries({
+              queryKey: jobDetailQueryKeys.detail(job.id),
+            });
+          }}
+        />
       )}
     </div>
   );

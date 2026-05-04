@@ -9,7 +9,7 @@
 import { AppBreadcrumbs } from "@/components/layout/AppBreadcrumbs";
 import { UserMenu } from "@/components/layout/UserMenu";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, Clock, UploadCloud, ShieldCheck } from "lucide-react";
+import { LayoutDashboard, Clock, UploadCloud, ShieldCheck, Users } from "lucide-react";
 import type { ReactNode } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useStartNewJob } from "@/hooks/useStartNewJob";
@@ -61,6 +61,9 @@ export function AppShell({ children }: AppShellProps) {
             </NavItem>
             <NavItem to="/history" icon={<Clock className="h-4 w-4" />}>
               {t("nav.history")}
+            </NavItem>
+            <NavItem to="/patients" icon={<Users className="h-4 w-4" />}>
+              {t("nav.patients")}
             </NavItem>
             {/* Admin panel link — only rendered for users with the admin role */}
             {user?.role === "admin" && (

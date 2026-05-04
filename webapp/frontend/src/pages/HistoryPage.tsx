@@ -36,16 +36,20 @@ import {
 import { HistoryFilters } from "@/components/history/HistoryFilters";
 import { JobsTable } from "@/components/history/JobsTable";
 import { JobsPagination } from "@/components/history/JobsPagination";
+import { PatientLinkModal } from "@/components/patients/PatientLinkModal";
 import { DEFAULT_JOB_FILTERS, filtersToParams, parseFiltersFromParams } from "@/lib/jobFilters";
 import { useJobsQuery } from "@/hooks/useJobsQuery";
 import { useRerunJobMutation } from "@/hooks/useRerunJobMutation";
 import { useDeleteJobMutation } from "@/hooks/useDeleteJobMutation";
+import { patchJob } from "@/api/jobs";
 import type { JobFilters } from "@/api/types";
 import { Trash2, UploadCloud } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { useStartNewJob } from "@/hooks/useStartNewJob";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 
 /**
  * History page — full list, filters, search, and server-side pagination.
@@ -190,9 +194,42 @@ export default function HistoryPage() {
     filters.status !== DEFAULT_JOB_FILTERS.status ||
     filters.pipelineType !== DEFAULT_JOB_FILTERS.pipelineType ||
     filters.modelArch !== DEFAULT_JOB_FILTERS.modelArch ||
-    filters.sort !== DEFAULT_JOB_FILTERS.sort;
+    filters.sort !== DEFAULT_JOB_FILTERS.sort ||
+    filters.patientId !== DEFAULT_JOB_FILTERS.patientId;
 
   const selectedCount = selectedIds.size;
+
+  // ---------------------------------------------------------------------------
+  // Patient link modal
+  // ---------------------------------------------------------------------------
+
+  // The job the patient link modal is currently targeting, or null when closed.
+  const [linkTargetJobId, setLinkTargetJobId] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+
+  // Derive the current patient info for the targeted job so PatientLinkModal
+  // can show the current link state and pre-fill the combobox.
+  const linkTargetJob = data?.items.find((j) => j.id === linkTargetJobId) ?? null;
+
+  const handleLinkPatient = useCallback((jobId: string) => {
+    setLinkTargetJobId(jobId);
+  }, []);
+
+  // Unlink is handled inline here (not via PatientLinkModal) because the
+  // confirmation dialog is already embedded in JobRowActions.  The caller
+  // expects us to fire patchJob directly.
+  const handleUnlinkPatient = useCallback(
+    async (jobId: string) => {
+      try {
+        await patchJob(jobId, { patient_id: null });
+        void queryClient.invalidateQueries({ queryKey: ["jobs"] });
+        toast.success(t("patient.link.successUnlinked"));
+      } catch {
+        toast.error(t("patient.link.error.fallback"));
+      }
+    },
+    [queryClient, t],
+  );
 
   // ---------------------------------------------------------------------------
   // Render
@@ -281,6 +318,8 @@ export default function HistoryPage() {
             onOpenJob={(jobId) => navigate(`/result/${jobId}`)}
             onRerun={(jobId) => rerun(jobId)}
             onDeleteOne={(jobId) => deleteOne(jobId)}
+            onLinkPatient={handleLinkPatient}
+            onUnlinkPatient={(jobId) => { void handleUnlinkPatient(jobId); }}
             onToggleSelect={handleToggleSelect}
             onSelectAll={handleSelectAll}
           />
@@ -336,6 +375,20 @@ export default function HistoryPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {/* ------------------------------------------------------------------ */}
+      {/* Patient link modal — opened when user picks link/change from row   */}
+      {/* ------------------------------------------------------------------ */}
+      <PatientLinkModal
+        open={linkTargetJobId !== null}
+        onOpenChange={(open) => { if (!open) setLinkTargetJobId(null); }}
+        jobId={linkTargetJobId ?? ""}
+        currentPatientId={linkTargetJob?.patient_id ?? null}
+        currentPatientName={linkTargetJob?.patient_name ?? null}
+        onLinked={() => {
+          void queryClient.invalidateQueries({ queryKey: ["jobs"] });
+          setLinkTargetJobId(null);
+        }}
+      />
     </div>
   );
 }
