@@ -16,6 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useDashboardStatusSummaryQuery } from "@/hooks/useDashboardStatusSummaryQuery";
 import type { JobStatus } from "@/api/types";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 
 // ---------------------------------------------------------------------------
 // Status chip styles
@@ -28,13 +29,6 @@ const STATUS_CHIP_STYLES: Record<JobStatus, string> = {
   processing: "bg-primary/10 text-primary",
   completed:  "bg-green-500/10 text-green-700 dark:text-green-400",
   failed:     "bg-destructive/10 text-destructive",
-};
-
-const STATUS_LABELS: Record<JobStatus, string> = {
-  pending:    "Pending",
-  processing: "Processing",
-  completed:  "Completed",
-  failed:     "Failed",
 };
 
 const STATUS_ORDER: JobStatus[] = ["pending", "processing", "completed", "failed"];
@@ -57,11 +51,12 @@ const STATUS_ORDER: JobStatus[] = ["pending", "processing", "completed", "failed
 export function DashboardStatusOverview() {
   const { data, isLoading, isFullyFailed, isPartiallyDegraded } =
     useDashboardStatusSummaryQuery();
+  const { t } = useTranslation();
 
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">Status Overview</CardTitle>
+        <CardTitle className="text-base">{t("dashboard.statusOverview")}</CardTitle>
       </CardHeader>
 
       <CardContent className="space-y-4">
@@ -81,7 +76,7 @@ export function DashboardStatusOverview() {
         {/* ---------------------------------------------------------------- */}
         {isFullyFailed && (
           <p className="text-sm text-muted-foreground py-2">
-            Status counts unavailable — dashboard data could not be loaded.
+            {t("dashboard.statusUnavailable")}
           </p>
         )}
 
@@ -103,7 +98,7 @@ export function DashboardStatusOverview() {
                     {data[status]}
                   </span>
                   <span className="text-xs mt-1 font-medium">
-                    {STATUS_LABELS[status]}
+                    {t(`job.status.${status}` as Parameters<typeof t>[0])}
                   </span>
                 </div>
               ))}

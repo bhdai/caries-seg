@@ -36,6 +36,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { ExternalLink, MoreHorizontal, RotateCcw, Trash2 } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -79,6 +80,7 @@ export function JobRowActions({
   // Controls the delete confirmation dialog independently of the dropdown so
   // the dialog stays open even after the dropdown closes.
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const { t } = useTranslation();
 
   return (
     <>
@@ -101,7 +103,7 @@ export function JobRowActions({
           {/* Open result detail */}
           <DropdownMenuItem onSelect={() => onOpen(jobId)}>
             <ExternalLink className="mr-2 h-4 w-4" />
-            Open result
+            {t("jobRow.openResult")}
           </DropdownMenuItem>
 
           <DropdownMenuSeparator />
@@ -114,7 +116,7 @@ export function JobRowActions({
             <RotateCcw
               className={`mr-2 h-4 w-4${isRerunPending ? " animate-spin" : ""}`}
             />
-            Rerun
+            {t("jobRow.rerun")}
           </DropdownMenuItem>
 
           <DropdownMenuSeparator />
@@ -129,7 +131,7 @@ export function JobRowActions({
             }}
           >
             <Trash2 className="mr-2 h-4 w-4" />
-            Delete
+            {t("jobRow.delete")}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -140,14 +142,13 @@ export function JobRowActions({
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent onClick={(e) => e.stopPropagation()}>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete job?</AlertDialogTitle>
+            <AlertDialogTitle>{t("jobRow.deleteConfirmTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently remove the job and all its result files.
-              This action cannot be undone.
+              {t("jobRow.deleteConfirmDescription")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("jobRow.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => {
@@ -155,7 +156,7 @@ export function JobRowActions({
                 onDelete(jobId);
               }}
             >
-              Delete
+              {t("jobRow.delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

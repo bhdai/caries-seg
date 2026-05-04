@@ -45,6 +45,7 @@ import { Trash2, UploadCloud } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useStartNewJob } from "@/hooks/useStartNewJob";
+import { useTranslation } from "react-i18next";
 
 /**
  * History page — full list, filters, search, and server-side pagination.
@@ -57,6 +58,7 @@ export default function HistoryPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const startNewJob = useStartNewJob();
+  const { t } = useTranslation();
 
   // ---------------------------------------------------------------------------
   // Filter state — parsed from URL, normalised to defaults for missing values
@@ -203,14 +205,14 @@ export default function HistoryPage() {
       {/* ------------------------------------------------------------------ */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">History</h1>
+          <h1 className="text-3xl font-bold tracking-tight">{t("history.title")}</h1>
           <p className="text-muted-foreground mt-1">
-            All inference jobs, filterable by status, pipeline, and model.
+            {t("history.subtitle")}
           </p>
         </div>
         <Button onClick={startNewJob}>
           <UploadCloud className="h-4 w-4 mr-2" />
-          New Job
+          {t("nav.newJob")}
         </Button>
       </div>
 
@@ -224,7 +226,7 @@ export default function HistoryPage() {
       {/* ------------------------------------------------------------------ */}
       {isError && !data && (
         <p className="text-sm text-destructive">
-          Could not load job history.{" "}
+          {t("history.loadError")}{" "}
           <button
             className="underline underline-offset-4 hover:opacity-80"
             onClick={() => window.location.reload()}
@@ -241,7 +243,7 @@ export default function HistoryPage() {
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-base">All Jobs</CardTitle>
+            <CardTitle className="text-base">{t("history.allJobs")}</CardTitle>
             {selectedCount > 0 && (
               <div className="flex items-center gap-2">
                 <span className="text-sm text-muted-foreground">
@@ -261,7 +263,7 @@ export default function HistoryPage() {
                   onClick={() => setBulkDeleteDialogOpen(true)}
                 >
                   <Trash2 className="h-4 w-4 mr-1.5" />
-                  Delete {selectedCount} job{selectedCount !== 1 ? "s" : ""}
+                  {t("history.deleteNJobs", { count: selectedCount })}
                 </Button>
               </div>
             )}
@@ -315,7 +317,7 @@ export default function HistoryPage() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              Delete {selectedCount} job{selectedCount !== 1 ? "s" : ""}?
+              {t("history.deleteConfirm", { count: selectedCount })}
             </AlertDialogTitle>
             <AlertDialogDescription>
               This will permanently remove the selected job
@@ -324,12 +326,12 @@ export default function HistoryPage() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{t("jobRow.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={handleBulkDeleteConfirm}
             >
-              Delete {selectedCount} job{selectedCount !== 1 ? "s" : ""}
+              {t("history.deleteNJobs", { count: selectedCount })}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

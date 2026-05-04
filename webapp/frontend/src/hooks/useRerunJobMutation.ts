@@ -8,10 +8,13 @@
 // disturbing the existing list state.
 
 import { rerunJob } from "@/api/jobs";
+import { ApiError } from "@/api/http";
 import { jobsQueryKeys } from "@/hooks/useJobsQuery";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import { translateApiError } from "@/lib/apiErrors";
 
 /**
  * Create and manage the server-side rerun mutation.
@@ -28,6 +31,7 @@ import { useNavigate } from "react-router-dom";
 export function useRerunJobMutation() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   return useMutation({
     mutationFn: (jobId: string) => rerunJob(jobId),
@@ -42,9 +46,10 @@ export function useRerunJobMutation() {
     },
 
     onError(error) {
-      const message =
-        error instanceof Error ? error.message : "Failed to rerun the job.";
-      toast.error("Rerun failed", { description: message });
+      const message = error instanceof ApiError
+        ? translateApiError(error)
+        : error.message;
+      toast.error(t("hooks.rerunJob.errorTitle"), { description: message });
     },
   });
 }

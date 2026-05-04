@@ -21,6 +21,7 @@ import { useRerunJobMutation } from "@/hooks/useRerunJobMutation";
 import type { JobSummary } from "@/api/types";
 import { UploadCloud } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -50,6 +51,7 @@ interface RecentJobsListProps {
  */
 export function RecentJobsList({ jobs, isLoading, isError }: RecentJobsListProps) {
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   // A single mutation instance covers all cards.  `variables` tells us which
   // job id triggered the currently-pending rerun so we can highlight only
@@ -97,7 +99,7 @@ export function RecentJobsList({ jobs, isLoading, isError }: RecentJobsListProps
   if (isError && (!jobs || jobs.length === 0)) {
     return (
       <div className="py-6 text-center text-sm text-muted-foreground">
-        Could not load recent jobs.{" "}
+        {t("recentJobs.loadError")}{" "}
         <button
           className="underline underline-offset-4 hover:text-foreground"
           onClick={() => window.location.reload()}
@@ -115,11 +117,11 @@ export function RecentJobsList({ jobs, isLoading, isError }: RecentJobsListProps
   if (!jobs || jobs.length === 0) {
     return (
       <div className="py-8 flex flex-col items-center gap-3">
-        <p className="text-sm text-muted-foreground">No inference jobs yet.</p>
+        <p className="text-sm text-muted-foreground">{t("recentJobs.empty")}</p>
         <Button asChild variant="outline" size="sm">
           <Link to="/upload">
             <UploadCloud className="h-4 w-4 mr-1.5" />
-            Upload your first X-ray
+            {t("recentJobs.uploadFirst")}
           </Link>
         </Button>
       </div>
@@ -138,7 +140,7 @@ export function RecentJobsList({ jobs, isLoading, isError }: RecentJobsListProps
       {/* Inline refetch-error notice — shown while stale cards are still visible */}
       {isError && (
         <p className="text-xs text-muted-foreground px-1 pb-3">
-          Could not refresh — showing last known results.{" "}
+          {t("recentJobs.refreshError")}{" "}
           <button
             className="underline underline-offset-2 hover:text-foreground"
             onClick={() => window.location.reload()}

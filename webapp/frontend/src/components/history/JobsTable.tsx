@@ -45,6 +45,8 @@ import { JobRowActions } from "@/components/history/JobRowActions";
 import { EmptyJobsState } from "@/components/history/EmptyJobsState";
 import { formatRelativeTime, formatAbsoluteTime } from "@/lib/time";
 import type { JobSummary } from "@/api/types";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 
 // ---------------------------------------------------------------------------
 // Column helper
@@ -117,6 +119,7 @@ function buildColumns(
   onDeleteOne: (id: string) => void,
   onToggleSelect: (id: string) => void,
   onSelectAll: (allIds: string[]) => void,
+  t: TFunction,
 ) {
   const allVisible = rows.map((r) => r.id);
   const allSelected =
@@ -149,14 +152,14 @@ function buildColumns(
 
     // Status badge
     col.accessor("status", {
-      header: "Status",
+      header: t("jobsTable.colStatus"),
       cell: (info) => <JobStatusChip status={info.getValue()} />,
       size: 110,
     }),
 
     // Primary filename + overflow preview (e.g. "+ 2 more")
     col.accessor("primary_filename", {
-      header: "File",
+      header: t("jobsTable.colFile"),
       cell: (info) => {
         const job = info.row.original;
         const extra = job.filename_preview.length;
@@ -167,7 +170,7 @@ function buildColumns(
             </p>
             {extra > 0 && (
               <p className="text-xs text-muted-foreground mt-0.5">
-                +{extra} more
+                {t("jobsTable.moreFiles", { n: extra })}
               </p>
             )}
           </div>
@@ -178,14 +181,14 @@ function buildColumns(
     // Pipeline + model arch in a compact two-line cell
     col.display({
       id: "pipeline_model",
-      header: "Pipeline / Model",
+      header: t("jobsTable.colPipelineModel"),
       cell: ({ row }) => {
         const job = row.original;
         return (
           <div className="text-sm">
-            <span>{formatPipelineLabel(job.pipeline_type)}</span>
+            <span>{job.pipeline_type === "two_stage" ? t("job.pipeline.two") : t("job.pipeline.single")}</span>
             <span className="text-muted-foreground"> · </span>
-            <span className="text-muted-foreground">{formatModelLabel(job.model_arch)}</span>
+            <span className="text-muted-foreground">{job.model_arch === "double_unet" ? t("job.model.doubleUnet") : t("job.model.unet")}</span>
           </div>
         );
       },
@@ -194,16 +197,16 @@ function buildColumns(
 
     // Image count
     col.accessor("image_count", {
-      header: "Images",
+      header: t("jobsTable.colImages"),
       cell: (info) => (
-        <span className="text-sm tabular-nums">{info.getValue()}</span>
+        <span className="text-sm tabular-nums">{t("job.images", { count: info.getValue() })}</span>
       ),
       size: 70,
     }),
 
     // Relative last-activity time with absolute date as tooltip
     col.accessor("last_activity_at", {
-      header: "Last Activity",
+      header: t("jobsTable.colLastActivity"),
       cell: (info) => {
         const iso = info.getValue();
         return (
@@ -285,6 +288,7 @@ export function JobsTable({
   onToggleSelect,
   onSelectAll,
 }: JobsTableProps) {
+  const { t } = useTranslation();
   // Build column definitions with access to current action callbacks.
   const columns = buildColumns(
     rows,
@@ -295,6 +299,7 @@ export function JobsTable({
     onDeleteOne,
     onToggleSelect,
     onSelectAll,
+    t,
   );
 
   const table = useReactTable({
@@ -391,16 +396,6 @@ export function JobsTable({
 }
 
 // ---------------------------------------------------------------------------
-// Label helpers
+// Label helpers — kept for reference; pipeline/model labels now use t() inline.
 // ---------------------------------------------------------------------------
-
-/** Convert a snake_case pipeline_type value to a readable display label. */
-function formatPipelineLabel(pipelineType: string): string {
-  return pipelineType === "two_stage" ? "Two Stage" : "Single Stage";
-}
-
-/** Convert a snake_case model_arch value to a readable display label. */
-function formatModelLabel(modelArch: string): string {
-  return modelArch === "double_unet" ? "Double UNet" : "UNet";
-}
 

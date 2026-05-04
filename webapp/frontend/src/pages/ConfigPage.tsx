@@ -39,15 +39,19 @@ import {
 import { useUploadStore } from "@/context/UploadStore";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-
-const ARCH_OPTIONS: { value: ModelArch; label: string }[] = [
-  { value: "unet", label: "UNet" },
-  { value: "double_unet", label: "Double-UNet" },
-];
+import { useTranslation } from "react-i18next";
 
 export default function ConfigPage() {
   const { files, setLastJobId } = useUploadStore();
   const navigate = useNavigate();
+  const { t } = useTranslation();
+
+  // ARCH_OPTIONS labels are translated — must be defined inside the component
+  // so that `t` is in scope and re-evaluates when the locale changes.
+  const ARCH_OPTIONS: { value: ModelArch; label: string }[] = [
+    { value: "unet", label: t("job.model.unet") },
+    { value: "double_unet", label: t("job.model.doubleUnet") },
+  ];
 
   const [pipeline, setPipeline] = useState<PipelineType>("single_stage");
   const [arch, setArch] = useState<ModelArch>("unet");
@@ -83,29 +87,26 @@ export default function ConfigPage() {
   return (
     <div className="max-w-lg mx-auto space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Configure Job</h1>
+        <h1 className="text-3xl font-bold tracking-tight">{t("config.title")}</h1>
         <p className="text-muted-foreground mt-1">
-          {files.length} file{files.length !== 1 ? "s" : ""} ready · choose
-          a pipeline and model.
+          {t("config.subtitle", { count: files.length })}
         </p>
       </div>
 
       {/* Pipeline selection */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Pipeline</CardTitle>
+          <CardTitle className="text-base">{t("config.pipelineTitle")}</CardTitle>
           <CardDescription>
-            Single-stage applies the segmentation model directly to the full
-            panoramic. Two-stage first detects individual teeth with YOLO,
-            then segments each crop.
+            {t("config.pipelineDescription")}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex flex-col gap-3">
             {(
               [
-                { value: "single_stage", label: "Single Stage" },
-                { value: "two_stage", label: "Two Stage" },
+                { value: "single_stage", label: t("config.pipelineSingle") },
+                { value: "two_stage", label: t("config.pipelineTwo") },
               ] as const
             ).map(({ value, label }) => (
               <label
@@ -130,17 +131,17 @@ export default function ConfigPage() {
       {/* Model architecture */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Model Architecture</CardTitle>
+          <CardTitle className="text-base">{t("config.modelArchitectureLabel")}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
-            <Label htmlFor="arch-select">Architecture</Label>
+            <Label htmlFor="arch-select">{t("config.architectureLabel")}</Label>
             <Select
               value={arch}
               onValueChange={(v) => setArch(v as ModelArch)}
             >
               <SelectTrigger id="arch-select" className="w-full">
-                <SelectValue placeholder="Select architecture" />
+                <SelectValue placeholder={t("config.architecturePlaceholder")} />
               </SelectTrigger>
               <SelectContent>
                 {ARCH_OPTIONS.map(({ value, label }) => (
@@ -164,10 +165,10 @@ export default function ConfigPage() {
       {/* Actions */}
       <div className="flex justify-between">
         <Button variant="outline" onClick={() => navigate("/upload")} disabled={submitting}>
-          Back
+          {t("config.back")}
         </Button>
         <Button onClick={handleSubmit} disabled={submitting}>
-          {submitting ? "Submitting…" : "Run Inference"}
+          {submitting ? t("config.submitting") : t("config.submit")}
         </Button>
       </div>
     </div>

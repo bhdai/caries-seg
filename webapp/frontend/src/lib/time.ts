@@ -5,59 +5,75 @@
 // Centralised helpers for producing human-readable relative-time labels from
 // ISO-8601 timestamp strings.  Keeping formatting here prevents inconsistent
 // date handling from spreading across Dashboard, History, and Result pages.
+//
+// Phase 4 update: formatRelativeTime() now uses Intl.RelativeTimeFormat for
+// locale-aware output (e.g. "3 phút trước" in Vietnamese, "3 minutes ago" in
+// English) rather than hand-rolled English string templates.
+
+import i18n from '@/i18n';
 
 /** Number of milliseconds in each time unit used for bucketing. */
 const SECOND_MS = 1_000;
 const MINUTE_MS = 60 * SECOND_MS;
 const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;
-const WEEK_MS = 7 * DAY_MS;
 const MONTH_MS = 30 * DAY_MS;
 
+// Timestamps within this window are treated as "just now" rather than
+// computing a minute count that rounds to 0, which would produce the less
+// natural "this minute" instead of "just now" / "vừa xong".
+const JUST_NOW_MS = 45 * SECOND_MS;
+
 /**
- * Format an ISO-8601 timestamp as a short relative-time label, e.g.
- * "just now", "3 min ago", "2 hr ago", "5 days ago", or the absolute date
- * for anything older than 30 days.
+ * Format an ISO 8601 timestamp as a human-readable relative time string
+ * in the given locale.
  *
- * @param isoString - ISO-8601 datetime string (UTC or with offset).
- * @param now       - Reference point; defaults to the current wall clock
- *                    so callers can pass a fixed value in tests.
+ * Uses Intl.RelativeTimeFormat for locale-aware output, e.g.:
+ *   - 'vi': "3 phút trước", "vừa xong", "hôm qua"
+ *   - 'en': "3 minutes ago", "just now", "yesterday"
+ *
+ * For timestamps older than 30 days, returns an absolute date string via
+ * toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' }).
+ *
+ * @param isoString - ISO 8601 date-time string, e.g. "2026-05-01T10:30:00Z".
+ * @param now       - Reference point for "now". Defaults to new Date().
+ *                    Injected for testing.
+ * @param locale    - BCP 47 locale tag. Defaults to i18n.language ?? 'vi'.
+ *                    Pass explicitly in tests to avoid dependency on runtime state.
+ * @returns Localised relative time string.
  */
 export function formatRelativeTime(
   isoString: string,
   now: Date = new Date(),
+  locale: string = i18n.language ?? 'vi',
 ): string {
   const ts = new Date(isoString);
   const diffMs = now.getTime() - ts.getTime();
 
+  // Build the formatter once — reused across all buckets below.
+  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: 'auto' });
+
   if (diffMs < 0) {
     // Future timestamp — should not happen in normal usage, but be graceful.
-    return "just now";
+    return rtf.format(0, 'second');
   }
 
-  if (diffMs < MINUTE_MS) return "just now";
-  if (diffMs < HOUR_MS) {
-    const mins = Math.floor(diffMs / MINUTE_MS);
-    return `${mins} min ago`;
-  }
-  if (diffMs < DAY_MS) {
-    const hrs = Math.floor(diffMs / HOUR_MS);
-    return `${hrs} hr ago`;
-  }
-  if (diffMs < WEEK_MS) {
-    const days = Math.floor(diffMs / DAY_MS);
-    return `${days} day${days !== 1 ? "s" : ""} ago`;
-  }
-  if (diffMs < MONTH_MS) {
-    const weeks = Math.floor(diffMs / WEEK_MS);
-    return `${weeks} week${weeks !== 1 ? "s" : ""} ago`;
-  }
+  // Bucket selection mirrors common relative-time UX conventions:
+  //   < 45 s   → "just now" / "vừa xong"
+  //   < 60 min → minute granularity
+  //   < 24 h   → hour granularity
+  //   < 30 d   → day granularity
+  //   ≥ 30 d   → absolute calendar date
+  if (diffMs < JUST_NOW_MS) return rtf.format(0, 'second');
+  if (diffMs < HOUR_MS) return rtf.format(-Math.floor(diffMs / MINUTE_MS), 'minute');
+  if (diffMs < DAY_MS) return rtf.format(-Math.floor(diffMs / HOUR_MS), 'hour');
+  if (diffMs < MONTH_MS) return rtf.format(-Math.floor(diffMs / DAY_MS), 'day');
 
   // Older than 30 days — show the calendar date for precision.
-  return ts.toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
+  return ts.toLocaleDateString(locale, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
   });
 }
 

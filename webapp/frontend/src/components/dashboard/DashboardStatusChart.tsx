@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/chart";
 import type { DashboardStatusSummary } from "@/api/types";
 import { Bar, BarChart, XAxis, YAxis } from "recharts";
+import i18n from "@/i18n";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -41,7 +42,7 @@ export function DashboardStatusChart({ summary }: DashboardStatusChartProps) {
   if (summary.total === 0) {
     return (
       <p className="text-xs text-muted-foreground text-center py-4">
-        No jobs yet — status distribution will appear here.
+        {i18n.t("dashboard.noJobsYet")}
       </p>
     );
   }

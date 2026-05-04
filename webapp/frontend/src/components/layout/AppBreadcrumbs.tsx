@@ -17,13 +17,21 @@ import {
 import { useUploadStore } from "@/context/UploadStore";
 import { Fragment } from "react";
 import { Link, useLocation } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 
 // ---------------------------------------------------------------------------
 // Step definitions
 // ---------------------------------------------------------------------------
 
+// Each step carries an i18n key rather than a hardcoded English label so the
+// breadcrumbs update immediately when the user switches locale.
+type BreadcrumbLabelKey =
+  | "breadcrumb.upload"
+  | "breadcrumb.configure"
+  | "breadcrumb.result";
+
 interface Step {
-  label: string;
+  labelKey: BreadcrumbLabelKey;
   path: string;
   // A route matches this step when any of these pathname patterns are active.
   matches: (pathname: string) => boolean;
@@ -31,17 +39,18 @@ interface Step {
 
 const UPLOAD_FLOW_STEPS: Step[] = [
   {
-    label: "Upload",
+    labelKey: "breadcrumb.upload",
     path: "/upload",
     matches: (p) => p === "/upload",
   },
   {
-    label: "Configure",
+    labelKey: "breadcrumb.configure",
     path: "/config",
     matches: (p) => p === "/config",
   },
   {
-    label: "Result",
+    // The Result step has no static path — it is resolved from the job ID.
+    labelKey: "breadcrumb.result",
     path: "",
     matches: (p) => p.startsWith("/result/"),
   },
@@ -62,6 +71,7 @@ const UPLOAD_FLOW_STEPS: Step[] = [
 export function AppBreadcrumbs() {
   const location = useLocation();
   const { lastJobId } = useUploadStore();
+  const { t } = useTranslation();
 
   // Extract jobId from the pathname when on a result route.
   // Pattern: /result/<uuid>
@@ -81,11 +91,11 @@ export function AppBreadcrumbs() {
     <Breadcrumb>
       <BreadcrumbList>
         {UPLOAD_FLOW_STEPS.map((step, index) => {
-          // Resolve the Result step path from the extracted jobId.  If we are
-          // not currently on the result route the link is omitted (the step
-          // renders as the current page label anyway once it becomes active).
+          // Resolve the Result step path from the extracted jobId.  The Result
+          // step is identified by its empty static path (all other steps have
+          // a fixed path like "/upload" or "/config").
           const resolvedPath =
-            step.label === "Result" && jobIdFromPath
+            step.path === "" && jobIdFromPath
               ? `/result/${jobIdFromPath}`
               : step.path;
 
@@ -96,20 +106,20 @@ export function AppBreadcrumbs() {
             // Use a Fragment so no extra DOM element sits between <ol> and
             // <li>, preserving valid list semantics and assistive-technology
             // expectations.
-            <Fragment key={step.label}>
+            <Fragment key={step.labelKey}>
               <BreadcrumbItem>
                 {isCurrent ? (
-                  <BreadcrumbPage>{step.label}</BreadcrumbPage>
+                  <BreadcrumbPage>{t(step.labelKey)}</BreadcrumbPage>
                 ) : resolvedPath ? (
                   // BreadcrumbLink with asChild delegates rendering to
                   // React Router Link so clicks use client-side navigation
                   // and do not trigger a full page reload.
                   <BreadcrumbLink asChild>
-                    <Link to={resolvedPath}>{step.label}</Link>
+                    <Link to={resolvedPath}>{t(step.labelKey)}</Link>
                   </BreadcrumbLink>
                 ) : (
                   <BreadcrumbPage className="text-muted-foreground">
-                    {step.label}
+                    {t(step.labelKey)}
                   </BreadcrumbPage>
                 )}
               </BreadcrumbItem>

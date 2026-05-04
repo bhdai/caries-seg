@@ -16,6 +16,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import i18n from "@/i18n";
 
 import {
   listAdminUsers,
@@ -102,6 +104,7 @@ interface ResetPasswordState {
 export function AdminUsersPage() {
   const { user: currentUser } = useAuth();
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   const [users, setUsers] = useState<AdminUserResponse[]>([]);
   const [total, setTotal] = useState(0);
@@ -140,7 +143,7 @@ export function AdminUsersPage() {
       setUsers(result.items);
       setTotal(result.total);
     } catch (err) {
-      setPageError(err instanceof ApiError ? err.message : "Failed to load users.");
+      setPageError(err instanceof ApiError ? err.message : t("admin.error.loadFailed"));
     } finally {
       setIsLoading(false);
     }
@@ -157,7 +160,7 @@ export function AdminUsersPage() {
   async function handleCreate(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (createForm.password.length < 8) {
-      setCreateForm((f) => ({ ...f, error: "Password must be at least 8 characters." }));
+      setCreateForm((f) => ({ ...f, error: t("admin.error.passwordMinLength") }));
       return;
     }
     setCreateForm((f) => ({ ...f, isSubmitting: true, error: null }));
@@ -174,7 +177,7 @@ export function AdminUsersPage() {
       setCreateForm((f) => ({
         ...f,
         isSubmitting: false,
-        error: err instanceof ApiError ? err.message : "Failed to create user.",
+        error: err instanceof ApiError ? err.message : t("admin.error.createFailed"),
       }));
     }
   }
@@ -189,7 +192,7 @@ export function AdminUsersPage() {
       await updateAdminUser(user.id, { role: newRole });
       await loadUsers();
     } catch (err) {
-      setPageError(err instanceof ApiError ? err.message : "Failed to update role.");
+      setPageError(err instanceof ApiError ? err.message : t("admin.error.roleFailed"));
     }
   }
 
@@ -202,7 +205,7 @@ export function AdminUsersPage() {
     if (!resetPasswordState) return;
     if (resetPasswordState.newPassword.length < 8) {
       setResetPasswordState((s) =>
-        s ? { ...s, error: "Password must be at least 8 characters." } : s,
+        s ? { ...s, error: t("admin.error.passwordMinLength") } : s,
       );
       return;
     }
@@ -219,7 +222,7 @@ export function AdminUsersPage() {
           ? {
               ...s,
               isSubmitting: false,
-              error: err instanceof ApiError ? err.message : "Failed to reset password.",
+              error: err instanceof ApiError ? err.message : t("admin.error.resetFailed"),
             }
           : s,
       );
@@ -238,7 +241,7 @@ export function AdminUsersPage() {
       setDeleteTarget(null);
       await loadUsers();
     } catch (err) {
-      setPageError(err instanceof ApiError ? err.message : "Failed to delete user.");
+      setPageError(err instanceof ApiError ? err.message : t("admin.error.deleteFailed"));
       setDeleteTarget(null);
     } finally {
       setIsDeleting(false);
@@ -254,13 +257,13 @@ export function AdminUsersPage() {
       {/* Page header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">User Management</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{t("admin.title")}</h1>
           <p className="text-sm text-muted-foreground mt-1">
             {total} user{total !== 1 ? "s" : ""} total
           </p>
         </div>
         <Button onClick={() => setShowCreateForm((v) => !v)}>
-          {showCreateForm ? "Cancel" : "Create User"}
+          {showCreateForm ? t("admin.cancelCreate") : t("admin.createUser")}
         </Button>
       </div>
 
@@ -277,13 +280,13 @@ export function AdminUsersPage() {
       {showCreateForm && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">New User</CardTitle>
+            <CardTitle className="text-base">{t("admin.createUser")}</CardTitle>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleCreate} noValidate>
               <div className="grid gap-4 sm:grid-cols-3">
                 <div className="grid gap-1.5">
-                  <Label htmlFor="new-username">Username</Label>
+                  <Label htmlFor="new-username">{t("admin.colUsername")}</Label>
                   <Input
                     id="new-username"
                     type="text"
@@ -298,7 +301,7 @@ export function AdminUsersPage() {
                 </div>
 
                 <div className="grid gap-1.5">
-                  <Label htmlFor="new-password">Temporary Password</Label>
+                  <Label htmlFor="new-password">{t("admin.tempPassword")}</Label>
                   <Input
                     id="new-password"
                     type="password"
@@ -314,7 +317,7 @@ export function AdminUsersPage() {
                 </div>
 
                 <div className="grid gap-1.5">
-                  <Label htmlFor="new-role">Role</Label>
+                  <Label htmlFor="new-role">{t("admin.colRole")}</Label>
                   <Select
                     value={createForm.role}
                     onValueChange={(v) =>
@@ -344,7 +347,7 @@ export function AdminUsersPage() {
 
               <div className="mt-4 flex justify-end">
                 <Button type="submit" disabled={createForm.isSubmitting}>
-                  {createForm.isSubmitting ? "Creating…" : "Create"}
+                  {t("admin.create")}
                 </Button>
               </div>
             </form>
@@ -359,12 +362,12 @@ export function AdminUsersPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Username</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Auth</TableHead>
-              <TableHead>Created</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead>{t("admin.colUsername")}</TableHead>
+              <TableHead>{t("admin.colRole")}</TableHead>
+              <TableHead>{t("admin.colStatus")}</TableHead>
+              <TableHead>{t("admin.colAuth")}</TableHead>
+              <TableHead>{t("admin.colCreated")}</TableHead>
+              <TableHead className="text-right">{t("admin.colActions")}</TableHead>
             </TableRow>
           </TableHeader>
 
@@ -372,7 +375,7 @@ export function AdminUsersPage() {
             {isLoading && (
               <TableRow>
                 <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                  Loading…
+                  {t("admin.loading")}
                 </TableCell>
               </TableRow>
             )}
@@ -380,7 +383,7 @@ export function AdminUsersPage() {
             {!isLoading && users.length === 0 && (
               <TableRow>
                 <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                  No users found.
+                  {t("admin.noUsers")}
                 </TableCell>
               </TableRow>
             )}
@@ -399,17 +402,17 @@ export function AdminUsersPage() {
                   <TableCell>
                     {u.must_change_pw ? (
                       <Badge variant="outline" className="text-amber-600 border-amber-300">
-                        must change pw
+                        {t("admin.statusMustChangePw")}
                       </Badge>
                     ) : (
-                      <span className="text-muted-foreground text-xs">active</span>
+                      <span className="text-muted-foreground text-xs">{t("admin.statusActive")}</span>
                     )}
                   </TableCell>
 
                   <TableCell>
                     <div className="flex gap-1 flex-wrap">
                       {u.has_password && (
-                        <Badge variant="outline" className="text-xs">password</Badge>
+                        <Badge variant="outline" className="text-xs">{t("admin.authPassword")}</Badge>
                       )}
                       {u.oauth_providers.map((p) => (
                         <Badge key={p} variant="outline" className="text-xs">{p}</Badge>
@@ -418,7 +421,7 @@ export function AdminUsersPage() {
                   </TableCell>
 
                   <TableCell className="text-muted-foreground text-xs">
-                    {new Date(u.created_at).toLocaleDateString()}
+                    {new Date(u.created_at).toLocaleDateString(i18n.language)}
                   </TableCell>
 
                   <TableCell className="text-right">
@@ -430,7 +433,7 @@ export function AdminUsersPage() {
                           variant="outline"
                           onClick={() => void handleToggleRole(u)}
                         >
-                          Make {u.role === "admin" ? "user" : "admin"}
+                          {u.role === "admin" ? t("admin.makeUser") : t("admin.makeAdmin")}
                         </Button>
                       )}
 
@@ -446,7 +449,7 @@ export function AdminUsersPage() {
                           )
                         }
                       >
-                        Reset pw
+                        {t("admin.resetPw")}
                       </Button>
 
                       {/* Delete — blocked for the currently logged-in admin */}
@@ -456,7 +459,7 @@ export function AdminUsersPage() {
                           variant="destructive"
                           onClick={() => setDeleteTarget(u)}
                         >
-                          Delete
+                          {t("admin.delete")}
                         </Button>
                       )}
                     </div>
@@ -473,7 +476,7 @@ export function AdminUsersPage() {
                         className="flex items-end gap-3 py-1"
                       >
                         <div className="grid gap-1.5 min-w-[200px]">
-                          <Label htmlFor={`reset-pw-${u.id}`}>New password</Label>
+                          <Label htmlFor={`reset-pw-${u.id}`}>{t("admin.newPassword")}</Label>
                           <Input
                             id={`reset-pw-${u.id}`}
                             type="password"
@@ -499,7 +502,7 @@ export function AdminUsersPage() {
                           size="sm"
                           disabled={resetPasswordState.isSubmitting}
                         >
-                          {resetPasswordState.isSubmitting ? "Saving…" : "Save"}
+                          {t("admin.save")}
                         </Button>
                         <Button
                           type="button"
@@ -507,7 +510,7 @@ export function AdminUsersPage() {
                           variant="outline"
                           onClick={() => setResetPasswordState(null)}
                         >
-                          Cancel
+                          {t("admin.cancelCreate")}
                         </Button>
                       </form>
                     </TableCell>
@@ -530,20 +533,20 @@ export function AdminUsersPage() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete user "{deleteTarget?.username}"?</AlertDialogTitle>
+            <AlertDialogTitle>{t("admin.deleteConfirmTitle", { username: deleteTarget?.username })}</AlertDialogTitle>
             <AlertDialogDescription>
               This permanently removes the account. Their jobs will be orphaned
               and become visible to admins only — no diagnostic data is deleted.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={isDeleting}>{t("admin.cancelCreate")}</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               disabled={isDeleting}
               onClick={() => void handleDeleteConfirm()}
             >
-              {isDeleting ? "Deleting…" : "Delete"}
+              {t("admin.delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

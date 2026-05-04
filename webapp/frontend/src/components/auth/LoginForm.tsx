@@ -13,9 +13,11 @@
 import type { ComponentProps } from "react";
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 
 import { useAuth } from "@/context/AuthContext";
 import { ApiError } from "@/api/http";
+import { translateApiError } from "@/lib/apiErrors";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -35,11 +37,11 @@ import { Label } from "@/components/ui/label";
 
 // Errors that the backend can pass back via query string after an OAuth
 // redirect. Each key maps to the value of the `?error=` param.
-const OAUTH_ERROR_MESSAGES: Record<string, string> = {
-  google_not_linked:
-    "No account is linked to this Google identity. Contact your admin.",
-  invalid_state:
-    "OAuth login failed (invalid state). Please try again.",
+// Translated using i18next; unknown keys fall back to the generic error key.
+const OAUTH_ERROR_KEYS: Record<string, string> = {
+  google_not_linked: "auth.login.error.googleNotLinked",
+  // invalid_state maps to the generic fallback — no dedicated locale key yet.
+  invalid_state: "auth.login.error.fallback",
 };
 
 // ---------------------------------------------------------------------------
@@ -50,6 +52,7 @@ export function LoginForm({ className, ...props }: ComponentProps<"div">) {
   const auth = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { t } = useTranslation();
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -61,12 +64,10 @@ export function LoginForm({ className, ...props }: ComponentProps<"div">) {
   useEffect(() => {
     const errorKey = searchParams.get("error");
     if (errorKey) {
-      setError(
-        OAUTH_ERROR_MESSAGES[errorKey] ??
-          "An error occurred during sign in. Please try again.",
-      );
+      const i18nKey = OAUTH_ERROR_KEYS[errorKey] ?? "auth.login.error.fallback";
+      setError(t(i18nKey as Parameters<typeof t>[0]));
     }
-  }, [searchParams]);
+  }, [searchParams, t]);
 
   // ---------------------------------------------------------------------------
   // Form submission
@@ -84,9 +85,9 @@ export function LoginForm({ className, ...props }: ComponentProps<"div">) {
       navigate("/", { replace: true });
     } catch (err) {
       if (err instanceof ApiError) {
-        setError(err.message);
+        setError(translateApiError(err));
       } else {
-        setError("An unexpected error occurred. Please try again.");
+        setError(t("auth.login.error.fallback"));
       }
     } finally {
       setIsSubmitting(false);
@@ -101,8 +102,8 @@ export function LoginForm({ className, ...props }: ComponentProps<"div">) {
     <div className={className} {...props}>
       <Card>
         <CardHeader className="text-center">
-          <CardTitle className="text-xl">Login to your account</CardTitle>
-          <CardDescription>Enter your credentials below</CardDescription>
+          <CardTitle className="text-xl">{t("auth.login.title")}</CardTitle>
+          <CardDescription>{t("auth.login.description")}</CardDescription>
         </CardHeader>
 
         <CardContent>
@@ -117,7 +118,7 @@ export function LoginForm({ className, ...props }: ComponentProps<"div">) {
 
               {/* Username field */}
               <div className="grid gap-2">
-                <Label htmlFor="username">Username</Label>
+                <Label htmlFor="username">{t("auth.login.username")}</Label>
                 <Input
                   id="username"
                   type="text"
@@ -132,7 +133,7 @@ export function LoginForm({ className, ...props }: ComponentProps<"div">) {
 
               {/* Password field */}
               <div className="grid gap-2">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password">{t("auth.login.password")}</Label>
                 <Input
                   id="password"
                   type="password"
@@ -146,13 +147,13 @@ export function LoginForm({ className, ...props }: ComponentProps<"div">) {
 
               {/* Primary submit button */}
               <Button type="submit" className="w-full" disabled={isSubmitting}>
-                {isSubmitting ? "Signing in…" : "Login"}
+                {isSubmitting ? t("auth.login.submitting") : t("auth.login.submit")}
               </Button>
 
               {/* Separator */}
               <div className="relative text-center text-sm after:absolute after:inset-0 after:top-1/2 after:z-0 after:flex after:items-center after:border-t after:border-border">
                 <span className="relative z-10 bg-card px-2 text-muted-foreground">
-                  Or
+                  {t("auth.login.or")}
                 </span>
               </div>
 
@@ -166,7 +167,7 @@ export function LoginForm({ className, ...props }: ComponentProps<"div">) {
                   window.location.href = "/api/auth/google";
                 }}
               >
-                Sign in with Google
+                {t("auth.login.google")}
               </Button>
 
               {/*

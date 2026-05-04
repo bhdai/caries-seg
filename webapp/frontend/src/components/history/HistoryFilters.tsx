@@ -32,6 +32,7 @@ import { DEFAULT_JOB_FILTERS } from "@/lib/jobFilters";
 import type { JobFilters } from "@/api/types";
 import { Search, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -71,6 +72,8 @@ export function HistoryFilters({ filters, onChange }: HistoryFiltersProps) {
   // Local state for the search input so the text field stays responsive while
   // the debounce timer is pending.
   const [localSearch, setLocalSearch] = useState(filters.search);
+
+  const { t } = useTranslation();
 
   // Keep local search value in sync when the URL changes externally, e.g.
   // browser back/forward navigation.
@@ -219,7 +222,7 @@ export function HistoryFilters({ filters, onChange }: HistoryFiltersProps) {
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
         <Input
           type="search"
-          placeholder="Search by filename or job ID…"
+          placeholder={t("historyFilters.searchPlaceholder")}
           value={localSearch}
           onChange={(e) => handleSearchChange(e.target.value)}
           onKeyDown={handleSearchKeyDown}
@@ -234,11 +237,11 @@ export function HistoryFilters({ filters, onChange }: HistoryFiltersProps) {
           <SelectValue placeholder="Status" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="all">All statuses</SelectItem>
-          <SelectItem value="pending">Pending</SelectItem>
-          <SelectItem value="processing">Processing</SelectItem>
-          <SelectItem value="completed">Completed</SelectItem>
-          <SelectItem value="failed">Failed</SelectItem>
+          <SelectItem value="all">{t("historyFilters.allStatuses")}</SelectItem>
+          <SelectItem value="pending">{t("job.status.pending")}</SelectItem>
+          <SelectItem value="processing">{t("job.status.processing")}</SelectItem>
+          <SelectItem value="completed">{t("job.status.completed")}</SelectItem>
+          <SelectItem value="failed">{t("job.status.failed")}</SelectItem>
         </SelectContent>
       </Select>
 
@@ -248,9 +251,9 @@ export function HistoryFilters({ filters, onChange }: HistoryFiltersProps) {
           <SelectValue placeholder="Pipeline" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="all">All pipelines</SelectItem>
-          <SelectItem value="single_stage">Single Stage</SelectItem>
-          <SelectItem value="two_stage">Two Stage</SelectItem>
+          <SelectItem value="all">{t("historyFilters.allPipelines")}</SelectItem>
+          <SelectItem value="single_stage">{t("config.pipelineSingle")}</SelectItem>
+          <SelectItem value="two_stage">{t("config.pipelineTwo")}</SelectItem>
         </SelectContent>
       </Select>
 
@@ -260,9 +263,9 @@ export function HistoryFilters({ filters, onChange }: HistoryFiltersProps) {
           <SelectValue placeholder="Model" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="all">All models</SelectItem>
-          <SelectItem value="unet">UNet</SelectItem>
-          <SelectItem value="double_unet">Double UNet</SelectItem>
+          <SelectItem value="all">{t("historyFilters.allModels")}</SelectItem>
+          <SelectItem value="unet">{t("job.model.unet")}</SelectItem>
+          <SelectItem value="double_unet">{t("job.model.doubleUnet")}</SelectItem>
         </SelectContent>
       </Select>
 
@@ -272,9 +275,9 @@ export function HistoryFilters({ filters, onChange }: HistoryFiltersProps) {
           <SelectValue placeholder="Sort" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="last_activity_desc">Last Activity</SelectItem>
-          <SelectItem value="newest">Newest First</SelectItem>
-          <SelectItem value="oldest">Oldest First</SelectItem>
+          <SelectItem value="last_activity_desc">{t("historyFilters.sortLastActivity")}</SelectItem>
+          <SelectItem value="newest">{t("historyFilters.sortNewest")}</SelectItem>
+          <SelectItem value="oldest">{t("historyFilters.sortOldest")}</SelectItem>
         </SelectContent>
       </Select>
 
@@ -287,7 +290,7 @@ export function HistoryFilters({ filters, onChange }: HistoryFiltersProps) {
           aria-label="Reset all filters"
         >
           <X className="h-4 w-4 mr-1.5" />
-          Reset
+          {t("historyFilters.reset")}
         </Button>
       )}
     </div>

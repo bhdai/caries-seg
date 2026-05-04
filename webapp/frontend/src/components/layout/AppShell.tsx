@@ -14,6 +14,7 @@ import type { ReactNode } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useStartNewJob } from "@/hooks/useStartNewJob";
 import { useAuth } from "@/context/AuthContext";
+import { useTranslation } from "react-i18next";
 
 interface AppShellProps {
   children: ReactNode;
@@ -29,6 +30,7 @@ export function AppShell({ children }: AppShellProps) {
   const location = useLocation();
   const startNewJob = useStartNewJob();
   const { user } = useAuth();
+  const { t } = useTranslation();
 
   // Determine whether we are in the multi-step upload flow so we can hide
   // redundant nav items and keep the flow focused.
@@ -49,27 +51,27 @@ export function AppShell({ children }: AppShellProps) {
             to="/"
             className="text-sm font-semibold tracking-tight hover:opacity-80 transition-opacity"
           >
-            CariesSeg
+            {t("nav.brand")}
           </NavLink>
 
           {/* Primary nav — hidden mid-flow to reduce noise */}
           <nav className="flex items-center gap-1">
             <NavItem to="/" icon={<LayoutDashboard className="h-4 w-4" />}>
-              Dashboard
+              {t("nav.dashboard")}
             </NavItem>
             <NavItem to="/history" icon={<Clock className="h-4 w-4" />}>
-              History
+              {t("nav.history")}
             </NavItem>
             {/* Admin panel link — only rendered for users with the admin role */}
             {user?.role === "admin" && (
               <NavItem to="/admin/users" icon={<ShieldCheck className="h-4 w-4" />}>
-                Admin
+                {t("nav.admin")}
               </NavItem>
             )}
             {/* Upload CTA is always visible for quick access */}
             <Button size="sm" className="ml-2" onClick={startNewJob}>
               <UploadCloud className="h-4 w-4 mr-1.5" />
-              New Job
+              {t("nav.newJob")}
             </Button>
             {/* User account menu — logout and change password */}
             <UserMenu />

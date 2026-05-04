@@ -26,18 +26,7 @@ import { formatRelativeTime } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import type { JobSummary } from "@/api/types";
 import { ExternalLink, RotateCcw } from "lucide-react";
-
-// ---------------------------------------------------------------------------
-// Label helpers — defined at module scope to avoid recreation on every render.
-// ---------------------------------------------------------------------------
-
-function formatPipelineLabel(pipelineType: string): string {
-  return pipelineType === "two_stage" ? "Two Stage" : "Single Stage";
-}
-
-function formatModelLabel(modelArch: string): string {
-  return modelArch === "double_unet" ? "Double UNet" : "UNet";
-}
+import { useTranslation } from "react-i18next";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -74,18 +63,20 @@ export function RecentJobCard({
   onOpen,
   onRerun,
 }: RecentJobCardProps) {
+  const { t } = useTranslation();
   const isThisRerunning = isRerunPending && rerunJobId === job.id;
 
-  const imageCountLabel =
-    job.image_count === 1 ? "1 image" : `${job.image_count} images`;
+  const pipelineLabel = job.pipeline_type === "two_stage"
+    ? t("job.pipeline.two")
+    : t("job.pipeline.single");
+  const modelLabel = job.model_arch === "double_unet"
+    ? t("job.model.doubleUnet")
+    : t("job.model.unet");
+  const imageCountLabel = t("job.images", { count: job.image_count });
 
   // Build a secondary label showing pipeline · model · image count so the
   // card conveys the full job configuration without requiring a tooltip.
-  const metaLabel = [
-    formatPipelineLabel(job.pipeline_type),
-    formatModelLabel(job.model_arch),
-    imageCountLabel,
-  ].join(" · ");
+  const metaLabel = [pipelineLabel, modelLabel, imageCountLabel].join(" · ");
 
   return (
     <Card className="flex flex-col">
@@ -117,7 +108,7 @@ export function RecentJobCard({
           aria-label={`Open result for job ${job.id}`}
         >
           <ExternalLink className="h-4 w-4 mr-1.5" aria-hidden="true" />
-          Open
+          {t("job.action.open")}
         </Button>
 
         {/* Rerun */}
@@ -133,7 +124,7 @@ export function RecentJobCard({
             className={cn("h-4 w-4 mr-1.5", isThisRerunning && "animate-spin")}
             aria-hidden="true"
           />
-          Rerun
+          {t("job.action.rerun")}
         </Button>
       </CardFooter>
     </Card>

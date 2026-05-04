@@ -28,6 +28,7 @@ import { cn } from "@/lib/utils";
 import type { BBoxResponse, ImageResultResponse } from "@/api/types";
 import { forwardRef } from "react";
 import { Download } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 export interface ResultImageCardProps {
   result: ImageResultResponse;
@@ -77,6 +78,7 @@ export const ResultImageCard = forwardRef<OverlayCanvasHandle, ResultImageCardPr
     },
     ref,
   ) {
+  const { t } = useTranslation();
   // Build a human-readable metadata string for the card subtitle.
   // Each segment is added only when the relevant data is present so the
   // string doesn't show stray "·" separators for missing fields.
@@ -88,7 +90,7 @@ export const ResultImageCard = forwardRef<OverlayCanvasHandle, ResultImageCardPr
   }
   if (result.bounding_boxes !== null) {
     const count = result.bounding_boxes.length;
-    metaParts.push(`${count} ${count === 1 ? "tooth" : "teeth"} detected`);
+    metaParts.push(t("result.teethDetected", { count }));
   }
 
   // The bounding boxes forwarded to the canvas.  We pass them only when the
@@ -138,7 +140,7 @@ export const ResultImageCard = forwardRef<OverlayCanvasHandle, ResultImageCardPr
         {/* Informational note when tooth detection ran but found nothing. */}
         {result.bounding_boxes !== null && result.bounding_boxes.length === 0 && (
           <p className="text-xs text-muted-foreground">
-            No teeth detected in this image.
+            {t("result.noTeethDetected")}
           </p>
         )}
       </CardHeader>

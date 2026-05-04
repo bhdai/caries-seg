@@ -10,6 +10,7 @@
 import { Button } from "@/components/ui/button";
 import { UploadCloud } from "lucide-react";
 import { useStartNewJob } from "@/hooks/useStartNewJob";
+import { useTranslation } from "react-i18next";
 
 /**
  * Render the dashboard page header: title, subtitle, and the primary
@@ -21,19 +22,20 @@ import { useStartNewJob } from "@/hooks/useStartNewJob";
  */
 export function DashboardSummary() {
   const startNewJob = useStartNewJob();
+  const { t } = useTranslation();
   return (
     <div className="flex items-start justify-between">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+        <h1 className="text-3xl font-bold tracking-tight">{t("dashboard.title")}</h1>
         <p className="text-muted-foreground mt-1">
-          Recent inference jobs and quick actions.
+          {t("dashboard.subtitle")}
         </p>
       </div>
 
       {/* Primary CTA — always visible to encourage the upload flow. */}
       <Button onClick={startNewJob}>
         <UploadCloud className="h-4 w-4 mr-2" />
-        New Job
+        {t("dashboard.newJob")}
       </Button>
     </div>
   );
