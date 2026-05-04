@@ -19,6 +19,7 @@
 // meaningful error instead of a blank page.
 
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 // Message type constants — must match the listener in UserMenu.tsx.
 export const GOOGLE_LINK_CODE_MSG = "google-link-code" as const;
@@ -37,6 +38,7 @@ export interface GoogleLinkErrorMessage {
 
 export function GoogleLinkCallbackPage() {
   const [status, setStatus] = useState<"pending" | "no-opener">("pending");
+  const { t } = useTranslation();
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -70,7 +72,7 @@ export function GoogleLinkCallbackPage() {
     return (
       <div className="flex min-h-svh items-center justify-center p-6">
         <p className="text-muted-foreground text-sm">
-          This page is only accessible as a popup during Google account linking.
+          {t("auth.googleLink.directNav")}
         </p>
       </div>
     );
@@ -78,7 +80,7 @@ export function GoogleLinkCallbackPage() {
 
   return (
     <div className="flex min-h-svh items-center justify-center p-6">
-      <p className="text-muted-foreground text-sm">Completing Google sign-in…</p>
+      <p className="text-muted-foreground text-sm">{t("auth.googleLink.completing")}</p>
     </div>
   );
 }

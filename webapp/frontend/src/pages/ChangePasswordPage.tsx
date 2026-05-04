@@ -12,10 +12,12 @@
 
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 
 import { useAuth } from "@/context/AuthContext";
 import { changePassword } from "@/api/auth";
 import { ApiError } from "@/api/http";
+import { translateApiError } from "@/lib/apiErrors";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -32,6 +34,7 @@ import { Label } from "@/components/ui/label";
 export function ChangePasswordPage() {
   const auth = useAuth();
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -47,10 +50,10 @@ export function ChangePasswordPage() {
   // Server-side validation still runs — these checks are for fast UX feedback.
   function validate(): string | null {
     if (newPassword.length < 8) {
-      return "New password must be at least 8 characters.";
+      return t("auth.changePassword.error.minLength");
     }
     if (newPassword !== confirmPassword) {
-      return "New password and confirmation do not match.";
+      return t("auth.changePassword.error.mismatch");
     }
     return null;
   }
@@ -81,9 +84,9 @@ export function ChangePasswordPage() {
       navigate("/", { replace: true });
     } catch (err) {
       if (err instanceof ApiError) {
-        setError(err.message);
+        setError(translateApiError(err));
       } else {
-        setError("An unexpected error occurred. Please try again.");
+        setError(t("auth.changePassword.error.fallback"));
       }
     } finally {
       setIsSubmitting(false);
@@ -99,9 +102,9 @@ export function ChangePasswordPage() {
       <div className="w-full max-w-sm">
         <Card>
           <CardHeader className="text-center">
-            <CardTitle className="text-xl">Change your password</CardTitle>
+            <CardTitle className="text-xl">{t("auth.changePassword.title")}</CardTitle>
             <CardDescription>
-              You must set a new password before continuing.
+              {t("auth.changePassword.description")}
             </CardDescription>
           </CardHeader>
 
@@ -164,7 +167,9 @@ export function ChangePasswordPage() {
                   className="w-full"
                   disabled={isSubmitting}
                 >
-                  {isSubmitting ? "Updating…" : "Update password"}
+                  {isSubmitting
+                    ? t("auth.changePassword.submitting")
+                    : t("auth.changePassword.submit")}
                 </Button>
               </div>
             </form>

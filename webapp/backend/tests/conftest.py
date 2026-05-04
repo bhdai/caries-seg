@@ -200,6 +200,32 @@ async def user_override(_app: FastAPI, test_user: User) -> AsyncIterator[None]:
 
 
 @pytest_asyncio.fixture
+async def no_google_settings(_app: FastAPI) -> AsyncIterator[None]:
+    """Override ``get_settings`` to return settings with Google OAuth disabled.
+
+    Applies to tests that exercise the "Google OAuth not configured" code paths.
+    The backend's ``.env`` file may contain real Google credentials, so this
+    fixture injects a settings copy with all Google-related fields cleared to
+    ``None``, ensuring the ``if not settings.GOOGLE_CLIENT_ID`` guard fires
+    regardless of the local environment.
+    """
+    from app.core.config import get_settings
+
+    real_settings = get_settings()
+    no_google = real_settings.model_copy(
+        update={
+            "GOOGLE_CLIENT_ID": None,
+            "GOOGLE_CLIENT_SECRET": None,
+            "GOOGLE_REDIRECT_URI": None,
+            "GOOGLE_LINK_REDIRECT_URI": None,
+        }
+    )
+    _app.dependency_overrides[get_settings] = lambda: no_google
+    yield
+    _app.dependency_overrides.pop(get_settings, None)
+
+
+@pytest_asyncio.fixture
 async def admin_override(_app: FastAPI, test_admin: User) -> AsyncIterator[None]:
     """Override ``get_current_user`` to return ``test_admin`` for all requests.
 

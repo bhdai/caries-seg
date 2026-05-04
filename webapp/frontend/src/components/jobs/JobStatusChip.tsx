@@ -12,18 +12,12 @@
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { JobStatus } from "@/api/types";
+import { useTranslation } from "react-i18next";
 
 interface JobStatusChipProps {
   status: JobStatus;
   className?: string;
 }
-
-const STATUS_LABELS: Record<JobStatus, string> = {
-  pending: "Pending",
-  processing: "Processing…",
-  completed: "Completed",
-  failed: "Failed",
-};
 
 /**
  * Render a colour-coded badge for the four job lifecycle statuses.
@@ -32,8 +26,13 @@ const STATUS_LABELS: Record<JobStatus, string> = {
  *  processing  → default (primary / blue)
  *  completed   → green outline
  *  failed      → destructive (red)
+ *
+ * Status labels are resolved from the active locale via i18next so the chip
+ * updates immediately when the user switches language.
  */
 export function JobStatusChip({ status, className }: JobStatusChipProps) {
+  const { t } = useTranslation();
+
   return (
     <Badge
       variant={
@@ -51,7 +50,7 @@ export function JobStatusChip({ status, className }: JobStatusChipProps) {
         className,
       )}
     >
-      {STATUS_LABELS[status]}
+      {t(`job.status.${status}`)}
     </Badge>
   );
 }

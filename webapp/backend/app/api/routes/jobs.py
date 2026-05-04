@@ -16,6 +16,8 @@ from typing import Annotated
 import cv2
 import numpy as np
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile
+
+from app.core.exceptions import AppError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
@@ -101,8 +103,9 @@ async def create_job(
         content = await upload.read()
 
         if len(content) > _MAX_FILE_BYTES:
-            raise HTTPException(
+            raise AppError(
                 status_code=413,
+                code="jobs.fileTooLarge",
                 detail=(
                     f"{upload.filename!r} exceeds the 10 MB upload limit "
                     f"({len(content) // (1024 * 1024)} MB received)."
@@ -110,8 +113,9 @@ async def create_job(
             )
 
         if upload.content_type not in _ALLOWED_MIME_TYPES:
-            raise HTTPException(
-                status_code=422,
+            raise AppError(
+                status_code=415,
+                code="jobs.invalidMime",
                 detail=(
                     f"{upload.filename!r} has unsupported content type "
                     f"{upload.content_type!r}. Only image/jpeg and "
@@ -124,8 +128,9 @@ async def create_job(
         nparr = np.frombuffer(content, np.uint8)
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         if img is None:
-            raise HTTPException(
+            raise AppError(
                 status_code=422,
+                code="jobs.invalidImage",
                 detail=f"{upload.filename!r} could not be decoded as an image.",
             )
 
@@ -180,8 +185,9 @@ async def create_job(
         except ValueError as e:
             raise HTTPException(status_code=422, detail=str(e)) from e
         except StorageError as e:
-            raise HTTPException(
+            raise AppError(
                 status_code=500,
+                code="jobs.persistFailed",
                 detail="Failed to persist uploaded files.",
             ) from e
 
@@ -231,12 +237,11 @@ async def get_job(
     result = await db.execute(select(Job).where(Job.id == job_id))
     job = result.scalar_one_or_none()
     if job is None:
-        raise HTTPException(status_code=404, detail=f"Job {job_id} not found.")
+        raise AppError(status_code=404, code="jobs.notFound", detail=f"Job {job_id} not found.")
 
-    # Non-admin users may only view their own jobs.  Admins see everything
-    # including orphaned jobs (owner_id=None, i.e. the owner was deleted).
+    # Non-admin users may only view their own jobs.
     if current_user.role != "admin" and job.owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Access denied.")
+        raise AppError(status_code=403, code="jobs.accessDenied", detail="Access denied.")
 
     return JobResponse.model_validate(job)
 

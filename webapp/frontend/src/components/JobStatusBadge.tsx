@@ -6,9 +6,12 @@
  *   processing  → default (primary / blue)
  *   completed   → custom green
  *   failed      → destructive (red)
+ *
+ * @deprecated Use JobStatusChip from components/jobs/JobStatusChip.tsx instead.
  */
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "react-i18next";
 
 type JobStatus = "pending" | "processing" | "completed" | "failed";
 
@@ -17,14 +20,9 @@ interface JobStatusBadgeProps {
   className?: string;
 }
 
-const STATUS_LABELS: Record<JobStatus, string> = {
-  pending: "Pending",
-  processing: "Processing…",
-  completed: "Completed",
-  failed: "Failed",
-};
-
 export function JobStatusBadge({ status, className }: JobStatusBadgeProps) {
+  const { t } = useTranslation();
+
   return (
     <Badge
       variant={
@@ -42,7 +40,7 @@ export function JobStatusBadge({ status, className }: JobStatusBadgeProps) {
         className,
       )}
     >
-      {STATUS_LABELS[status]}
+      {t(`job.status.${status}`)}
     </Badge>
   );
 }

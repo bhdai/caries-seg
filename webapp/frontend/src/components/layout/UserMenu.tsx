@@ -18,12 +18,15 @@
 
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { LogOut, KeyRound, ChevronDown, Link2, Users } from "lucide-react";
+import { LogOut, KeyRound, ChevronDown, Link2, Users, Globe } from "lucide-react";
 import { toast } from "sonner";
+import { useTranslation } from "react-i18next";
 
 import { useAuth } from "@/context/AuthContext";
+import { useLanguage } from "@/context/LanguageContext";
 import { linkGoogleAccount } from "@/api/auth";
 import { ApiError } from "@/api/http";
+import { translateApiError } from "@/lib/apiErrors";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -44,6 +47,8 @@ import {
 export function UserMenu() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const { t } = useTranslation();
+  const { locale, setLocale } = useLanguage();
   const [isLinking, setIsLinking] = useState(false);
 
   // Should not render without a user — ProtectedRoute prevents this, but
@@ -106,14 +111,14 @@ export function UserMenu() {
           .catch((err) => {
             const msg =
               err instanceof ApiError
-                ? err.message
-                : "Failed to link Google account. Please try again.";
+                ? translateApiError(err)
+                : t("userMenu.googleLinkFailed");
             toast.error(msg);
           })
           .finally(() => setIsLinking(false));
       } else {
         setIsLinking(false);
-        toast.error("Google sign-in was cancelled or failed. Please try again.");
+        toast.error(t("userMenu.googleCancelled"));
       }
     }
 
@@ -152,16 +157,16 @@ export function UserMenu() {
 
         <DropdownMenuItem onClick={() => navigate("/change-password")}>
           <KeyRound className="mr-2 h-4 w-4" />
-          Change Password
+          {t("userMenu.changePassword")}
         </DropdownMenuItem>
 
         <DropdownMenuItem onClick={handleLinkGoogle} disabled={isLinking || user.oauth_providers.includes("google")}>
           <Link2 className="mr-2 h-4 w-4" />
           {user.oauth_providers.includes("google")
-            ? "Google Linked"
+            ? t("userMenu.googleLinked")
             : isLinking
-              ? "Linking…"
-              : "Link Google Account"}
+              ? t("userMenu.linking")
+              : t("userMenu.linkGoogle")}
         </DropdownMenuItem>
 
         {/* Admin shortcut — duplicates the nav bar item for convenience */}
@@ -170,10 +175,23 @@ export function UserMenu() {
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => navigate("/admin/users")}>
               <Users className="mr-2 h-4 w-4" />
-              Manage Users
+              {t("userMenu.manageUsers")}
             </DropdownMenuItem>
           </>
         )}
+
+        {/* Language toggle — shown between account actions and log-out.
+            Label shows the OTHER language (the one you'll switch to). */}
+        <DropdownMenuSeparator />
+
+        <DropdownMenuItem
+          onClick={() => setLocale(locale === "vi" ? "en" : "vi")}
+        >
+          <Globe className="mr-2 h-4 w-4" />
+          {locale === "vi"
+            ? t("userMenu.switchToEnglish")
+            : t("userMenu.switchToVietnamese")}
+        </DropdownMenuItem>
 
         <DropdownMenuSeparator />
 
@@ -182,7 +200,7 @@ export function UserMenu() {
           className="text-destructive focus:text-destructive"
         >
           <LogOut className="mr-2 h-4 w-4" />
-          Log Out
+          {t("userMenu.logout")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

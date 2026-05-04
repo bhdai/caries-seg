@@ -22,6 +22,7 @@ import { UploadCloud } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type FileRejection, useDropzone } from "react-dropzone";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 
 const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 const ACCEPTED_MIME = { "image/jpeg": [], "image/png": [] };
@@ -34,6 +35,7 @@ interface Preview {
 export default function UploadPage() {
   const { files, setFiles } = useUploadStore();
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   const [previews, setPreviews] = useState<Preview[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
@@ -74,9 +76,9 @@ export default function UploadPage() {
       for (const { file, errors: errs } of rejected) {
         for (const err of errs) {
           if (err.code === "file-too-large") {
-            newErrors.push(`"${file.name}" exceeds 10 MB.`);
+            newErrors.push(t("upload.error.tooLarge", { filename: file.name }));
           } else if (err.code === "file-invalid-type") {
-            newErrors.push(`"${file.name}" is not a JPEG or PNG.`);
+            newErrors.push(t("upload.error.invalidType", { filename: file.name }));
           } else {
             newErrors.push(`"${file.name}": ${err.message}`);
           }
@@ -131,9 +133,9 @@ export default function UploadPage() {
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Upload X-rays</h1>
+        <h1 className="text-3xl font-bold tracking-tight">{t("upload.title")}</h1>
         <p className="text-muted-foreground mt-1">
-          Drag and drop one or more panoramic dental radiographs to begin.
+          {t("upload.subtitle")}
         </p>
       </div>
 
@@ -151,14 +153,14 @@ export default function UploadPage() {
               <input {...getInputProps()} />
               <UploadCloud className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
               {isDragActive ? (
-                <p className="text-sm font-medium">Drop the files here…</p>
+                <p className="text-sm font-medium">{t("upload.dragActive")}</p>
               ) : (
                 <>
                   <p className="text-sm font-medium">
-                    Click or drag files here
+                    {t("upload.dropzoneCta")}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    JPEG or PNG · max 10 MB each
+                    {t("upload.constraint")}
                   </p>
                 </>
               )}
@@ -183,7 +185,7 @@ export default function UploadPage() {
         {previews.length > 0 && (
           <div>
             <p className="text-sm font-medium mb-3">
-              {previews.length} file{previews.length > 1 ? "s" : ""} selected
+              {t("upload.selectedFiles", { count: previews.length })}
             </p>
             <div className="flex flex-wrap gap-3">
               {previews.map((p, i) => (
@@ -204,7 +206,7 @@ export default function UploadPage() {
             disabled={previews.length === 0}
             onClick={handleContinue}
           >
-            Continue
+            {t("upload.continue")}
           </Button>
         </div>
     </div>

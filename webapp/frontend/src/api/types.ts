@@ -122,6 +122,12 @@ export class ApiError extends Error {
   constructor(
     public readonly status: number,
     message: string,
+    /**
+     * Optional machine-readable error code from the backend response body.
+     * Present only when the backend raises `AppError` (e.g. "auth.invalidCredentials").
+     * Absent for generic HTTP errors that do not originate from AppError.
+     */
+    public readonly code?: string,
   ) {
     super(message);
     this.name = "ApiError";

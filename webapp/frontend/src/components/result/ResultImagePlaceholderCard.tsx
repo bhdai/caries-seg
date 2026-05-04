@@ -20,6 +20,7 @@
 
 import { AlertCircle, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useTranslation } from "react-i18next";
 
 export type PlaceholderPhase = "pending" | "processing" | "failed";
 
@@ -63,6 +64,7 @@ export function ResultImagePlaceholderCard({
   phase,
   errorMessage,
 }: ResultImagePlaceholderCardProps) {
+  const { t } = useTranslation();
   // Mirror the aspect-ratio logic used by OverlayCanvas so the placeholder
   // occupies the same vertical space as the eventual ready card.
   const aspectRatio =
@@ -97,12 +99,12 @@ export function ResultImagePlaceholderCard({
               />
               <div className="text-center space-y-1 px-4">
                 <p className="text-sm font-medium text-destructive">
-                  {PHASE_LABELS.failed}
+                  {t("imagePlaceholder.failed.label")}
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {/* Prefer the job-level error message when available, fall
                       back to generic copy. */}
-                  {errorMessage ?? PHASE_DESCRIPTIONS.failed}
+                  {errorMessage ?? t("imagePlaceholder.failed.description")}
                 </p>
               </div>
             </>
@@ -114,10 +116,10 @@ export function ResultImagePlaceholderCard({
               />
               <div className="text-center space-y-1 px-4">
                 <p className="text-sm font-medium text-muted-foreground">
-                  {PHASE_LABELS[phase]}
+                  {t(`imagePlaceholder.${phase}.label` as Parameters<typeof t>[0])}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {PHASE_DESCRIPTIONS[phase]}
+                  {t(`imagePlaceholder.${phase}.description` as Parameters<typeof t>[0])}
                 </p>
               </div>
             </>

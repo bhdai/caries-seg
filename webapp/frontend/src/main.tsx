@@ -1,3 +1,6 @@
+// i18n must be initialised before React renders so every component has access
+// to the translation instance from the very first render.
+import './i18n';
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { Toaster } from "@/components/ui/sonner";

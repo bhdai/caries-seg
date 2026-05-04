@@ -25,6 +25,8 @@ from urllib.parse import urlencode
 import httpx
 import jwt as pyjwt
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+
+from app.core.exceptions import AppError
 from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -91,8 +93,9 @@ async def login(
     password) return the same 401 with the same message to prevent username
     enumeration.
     """
-    _invalid = HTTPException(
+    _invalid = AppError(
         status_code=status.HTTP_401_UNAUTHORIZED,
+        code="auth.invalidCredentials",
         detail="Invalid credentials",
     )
 
@@ -164,14 +167,16 @@ async def change_password(
     not need to log in again after changing their password.
     """
     if user.password_hash is None:
-        raise HTTPException(
+        raise AppError(
             status_code=status.HTTP_400_BAD_REQUEST,
+            code="auth.noPassword",
             detail="Account has no password",
         )
 
     if not verify_password(body.current_password, user.password_hash):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+        raise AppError(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            code="auth.wrongPassword",
             detail="Current password incorrect",
         )
 
@@ -215,8 +220,9 @@ async def google_login(
     prevent CSRF attacks on the callback endpoint.
     """
     if settings.GOOGLE_CLIENT_ID is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+        raise AppError(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            code="auth.oauthNotConfigured",
             detail="Google OAuth not configured",
         )
 
@@ -271,8 +277,9 @@ async def google_link_init(
     ``GOOGLE_LINK_REDIRECT_URI`` is not configured.
     """
     if settings.GOOGLE_CLIENT_ID is None or settings.GOOGLE_LINK_REDIRECT_URI is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+        raise AppError(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            code="auth.linkNotConfigured",
             detail="Google account linking not configured",
         )
 
@@ -447,8 +454,9 @@ async def link_google(
     # flow initiation step (GET /api/auth/google/link) and is single-use.
     stored_state = request.cookies.get("oauth_link_state")
     if not stored_state or stored_state != body.state:
-        raise HTTPException(
+        raise AppError(
             status_code=status.HTTP_400_BAD_REQUEST,
+            code="auth.invalidState",
             detail="Invalid OAuth state — possible CSRF attempt or session expired",
         )
 
@@ -474,15 +482,17 @@ async def link_google(
         token_response.raise_for_status()
         token_data = token_response.json()
     except httpx.HTTPError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+        raise AppError(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            code="auth.googleTokenFailed",
             detail="Google token exchange failed",
         ) from exc
 
     id_token_str = token_data.get("id_token")
     if not id_token_str:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+        raise AppError(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            code="auth.googleNoToken",
             detail="Google token exchange did not return an id_token",
         )
 
@@ -525,8 +535,9 @@ async def link_google(
             response.delete_cookie(key="oauth_link_state", path="/")
             return response
         # Linked to a *different* user — reject to prevent account takeover.
-        raise HTTPException(
+        raise AppError(
             status_code=status.HTTP_409_CONFLICT,
+            code="auth.googleAlreadyLinked",
             detail="This Google account is already linked to another user",
         )
 

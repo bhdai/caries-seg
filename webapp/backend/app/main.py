@@ -19,12 +19,14 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import func, select, update
 
 from app.core.config import get_settings
 from app.core.database import get_session_factory, init_db
+from app.core.exceptions import AppError
 from app.core.security import hash_password
 from app.inference.registry import init_registry
 from app.models.job import Job, JobStatus
@@ -161,6 +163,41 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # ------------------------------------------------------------------
+    # Exception handlers
+    #
+    # AppError extends HTTPException with a machine-readable ``code``
+    # field.  Plain HTTPException raised by FastAPI's routing layer or
+    # third-party middleware is intentionally NOT handled here so it
+    # retains the default ``{"detail": ...}`` shape.
+    # ------------------------------------------------------------------
+    async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
+        """Serialise AppError instances as {code, detail} JSON.
+
+        Called automatically by FastAPI when a route raises AppError.
+        Returns an HTTP response with:
+          - status code from ``exc.status_code``
+          - JSON body: ``{"code": exc.code, "detail": exc.detail}``
+
+        Plain HTTPException (from FastAPI internals or third-party middleware)
+        is NOT handled here; it uses FastAPI's default handler which returns
+        only ``{"detail": ...}``.
+
+        Args:
+            request: Incoming HTTP request (required by FastAPI handler
+                contract; not used in this handler).
+            exc: The AppError instance that was raised.
+
+        Returns:
+            JSONResponse with the error envelope.
+        """
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"code": exc.code, "detail": exc.detail},
+        )
+
+    application.add_exception_handler(AppError, app_error_handler)  # type: ignore[arg-type]
 
     from app.api.routes import router
 

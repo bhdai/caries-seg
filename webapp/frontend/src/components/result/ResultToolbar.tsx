@@ -19,6 +19,7 @@
 
 import { Button } from "@/components/ui/button";
 import { CheckSquare, Download, Loader2, Square, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 // =============================================================================
 // Props
@@ -73,12 +74,10 @@ export function ResultToolbar({
   onDownloadSelected,
 }: ResultToolbarProps) {
   const selectedCount = selectedReadyIds.length;
-  const allReady = readyCount === totalCount;
+  const { t } = useTranslation();
 
   // Progress copy shown to the right of the action buttons.
-  const progressCopy = allReady
-    ? `${readyCount} ${readyCount === 1 ? "image" : "images"} ready`
-    : `${readyCount} / ${totalCount} ready`;
+  const progressCopy = t("resultToolbar.progress", { ready: readyCount, total: totalCount });
 
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/20 px-3 py-2">
@@ -100,7 +99,7 @@ export function ResultToolbar({
             disabled={readyCount === 0 || selectedCount === readyCount || isBatchExporting}
           >
             <CheckSquare className="mr-1.5 h-4 w-4" aria-hidden="true" />
-            Select all
+            {t("resultToolbar.selectAll")}
           </Button>
 
           <Button
@@ -110,7 +109,7 @@ export function ResultToolbar({
             disabled={selectedCount === 0 || isBatchExporting}
           >
             <X className="mr-1.5 h-4 w-4" aria-hidden="true" />
-            Clear
+            {t("resultToolbar.clear")}
           </Button>
         </>
       )}
@@ -126,7 +125,7 @@ export function ResultToolbar({
         aria-pressed={isSelectionMode}
       >
         <Square className="mr-1.5 h-4 w-4" aria-hidden="true" />
-        {isSelectionMode ? "Cancel selection" : "Select"}
+        {isSelectionMode ? t("resultToolbar.cancelSelection") : t("resultToolbar.select")}
       </Button>
 
       {/* ------------------------------------------------------------------ */}
@@ -139,14 +138,14 @@ export function ResultToolbar({
           size="sm"
           onClick={onDownloadSelected}
           disabled={selectedCount === 0 || isBatchExporting}
-          aria-label={`Download ${selectedCount} selected ${selectedCount === 1 ? "image" : "images"}`}
+          aria-label={t("resultToolbar.downloadSelectedAria", { n: selectedCount })}
         >
           {isBatchExporting ? (
             <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" />
           ) : (
             <Download className="mr-1.5 h-4 w-4" aria-hidden="true" />
           )}
-          Download selected ({selectedCount})
+          {t("resultToolbar.downloadSelected", { n: selectedCount })}
         </Button>
       )}
 
@@ -158,14 +157,14 @@ export function ResultToolbar({
         size="sm"
         onClick={onDownloadAllReady}
         disabled={readyCount === 0 || isBatchExporting}
-        aria-label={`Download all ${readyCount} ready ${readyCount === 1 ? "image" : "images"}`}
+        aria-label={t("resultToolbar.downloadAllReadyAria", { n: readyCount })}
       >
         {isBatchExporting ? (
           <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" />
         ) : (
           <Download className="mr-1.5 h-4 w-4" aria-hidden="true" />
         )}
-        {isSelectionMode ? "Download all ready" : "Download all"}
+        {isSelectionMode ? t("resultToolbar.downloadAllReady") : t("resultToolbar.downloadAll")}
       </Button>
     </div>
   );

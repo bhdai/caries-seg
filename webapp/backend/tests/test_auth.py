@@ -70,7 +70,10 @@ async def test_login_wrong_password(client: AsyncClient, test_user) -> None:
         json={"username": test_user.username, "password": "wrong_password"},
     )
     assert resp.status_code == 401
-    assert resp.json()["detail"] == "Invalid credentials"
+    body = resp.json()
+    assert body["detail"] == "Invalid credentials"
+    assert "code" in body
+    assert body["code"] == "auth.invalidCredentials"
 
 
 async def test_login_unknown_user(client: AsyncClient) -> None:
@@ -80,7 +83,10 @@ async def test_login_unknown_user(client: AsyncClient) -> None:
         json={"username": "nobody_here", "password": "any_password"},
     )
     assert resp.status_code == 401
-    assert resp.json()["detail"] == "Invalid credentials"
+    body = resp.json()
+    assert body["detail"] == "Invalid credentials"
+    assert "code" in body
+    assert body["code"] == "auth.invalidCredentials"
 
 
 async def test_login_oauth_only_account(
@@ -113,7 +119,10 @@ async def test_login_oauth_only_account(
         json={"username": "oauth_only_user", "password": "any_password"},
     )
     assert resp.status_code == 401
-    assert resp.json()["detail"] == "Invalid credentials"
+    body = resp.json()
+    assert body["detail"] == "Invalid credentials"
+    assert "code" in body
+    assert body["code"] == "auth.invalidCredentials"
 
 
 async def test_login_missing_fields(client: AsyncClient) -> None:
@@ -167,6 +176,9 @@ async def test_me_unauthenticated(client: AsyncClient) -> None:
     # No user_override fixture → get_current_user raises 401.
     resp = await client.get("/api/auth/me")
     assert resp.status_code == 401
+    body = resp.json()
+    assert "code" in body
+    assert body["code"] == "auth.notAuthenticated"
 
 
 # ===========================================================================
@@ -197,7 +209,7 @@ async def test_change_password_success(
 async def test_change_password_wrong_current(
     client: AsyncClient, user_override
 ) -> None:
-    """Providing the wrong current password returns 401."""
+    """Providing the wrong current password returns 400."""
     resp = await client.post(
         "/api/auth/change-password",
         json={
@@ -205,7 +217,10 @@ async def test_change_password_wrong_current(
             "new_password": "NewPassword2!",
         },
     )
-    assert resp.status_code == 401
+    assert resp.status_code == 400
+    body = resp.json()
+    assert "code" in body
+    assert body["code"] == "auth.wrongPassword"
 
 
 async def test_change_password_too_short(
@@ -232,6 +247,9 @@ async def test_change_password_requires_auth(client: AsyncClient) -> None:
         },
     )
     assert resp.status_code == 401
+    body = resp.json()
+    assert "code" in body
+    assert body["code"] == "auth.notAuthenticated"
 
 
 # ===========================================================================
@@ -275,6 +293,9 @@ async def test_admin_create_user_duplicate_username(
         },
     )
     assert resp.status_code == 409
+    body = resp.json()
+    assert "code" in body
+    assert body["code"] == "users.usernameExists"
 
 
 async def test_admin_create_user_invalid_username(
@@ -297,6 +318,9 @@ async def test_admin_create_user_requires_admin(
         json={"username": "should_fail", "password": "Password1!"},
     )
     assert resp.status_code == 403
+    body = resp.json()
+    assert "code" in body
+    assert body["code"] == "auth.adminRequired"
 
 
 async def test_admin_create_user_requires_auth(client: AsyncClient) -> None:
@@ -306,6 +330,9 @@ async def test_admin_create_user_requires_auth(client: AsyncClient) -> None:
         json={"username": "should_fail", "password": "Password1!"},
     )
     assert resp.status_code == 401
+    body = resp.json()
+    assert "code" in body
+    assert body["code"] == "auth.notAuthenticated"
 
 
 # ===========================================================================
@@ -389,8 +416,11 @@ async def test_admin_cannot_demote_self(
         f"/api/admin/users/{test_admin.id}",
         json={"role": "user"},
     )
-    assert resp.status_code == 400
-    assert "role" in resp.json()["detail"].lower()
+    assert resp.status_code == 403
+    body = resp.json()
+    assert "code" in body
+    assert body["code"] == "users.selfRoleChange"
+    assert "role" in body["detail"].lower()
 
 
 async def test_admin_update_nonexistent_user(
@@ -403,6 +433,9 @@ async def test_admin_update_nonexistent_user(
         json={"role": "user"},
     )
     assert resp.status_code == 404
+    body = resp.json()
+    assert "code" in body
+    assert body["code"] == "users.notFound"
 
 
 # ===========================================================================
@@ -428,8 +461,11 @@ async def test_admin_cannot_delete_self(
 ) -> None:
     """An admin cannot delete their own account — self-deletion guard."""
     resp = await client.delete(f"/api/admin/users/{test_admin.id}")
-    assert resp.status_code == 400
-    assert "own account" in resp.json()["detail"].lower()
+    assert resp.status_code == 403
+    body = resp.json()
+    assert "code" in body
+    assert body["code"] == "users.selfDelete"
+    assert "own account" in body["detail"].lower()
 
 
 async def test_admin_delete_nonexistent_user(
@@ -470,6 +506,9 @@ async def test_full_login_me_logout_flow(
     # 4. /me with no valid cookie → 401.
     me_after = await client.get("/api/auth/me")
     assert me_after.status_code == 401
+    me_after_body = me_after.json()
+    assert "code" in me_after_body
+    assert me_after_body["code"] == "auth.notAuthenticated"
 
 
 # ===========================================================================
@@ -570,11 +609,17 @@ def google_settings(monkeypatch: pytest.MonkeyPatch) -> None:
 # ---------------------------------------------------------------------------
 
 
-async def test_google_login_not_configured(client: AsyncClient) -> None:
-    """Without Google OAuth env vars, the endpoint returns 404."""
+async def test_google_login_not_configured(
+    client: AsyncClient,
+    no_google_settings: None,
+) -> None:
+    """Without Google OAuth env vars, the endpoint returns 503."""
     resp = await client.get("/api/auth/google", follow_redirects=False)
-    assert resp.status_code == 404
-    assert "not configured" in resp.json()["detail"].lower()
+    assert resp.status_code == 503
+    body = resp.json()
+    assert "code" in body
+    assert body["code"] == "auth.oauthNotConfigured"
+    assert "not configured" in body["detail"].lower()
 
 
 async def test_google_login_redirects_to_google(
@@ -598,7 +643,10 @@ async def test_google_login_redirects_to_google(
 # ---------------------------------------------------------------------------
 
 
-async def test_google_callback_not_configured(client: AsyncClient) -> None:
+async def test_google_callback_not_configured(
+    client: AsyncClient,
+    no_google_settings: None,
+) -> None:
     """Without Google OAuth env vars, the callback endpoint returns 404."""
     resp = await client.get(
         "/api/auth/google/callback?code=x&state=y",
@@ -618,7 +666,7 @@ async def test_google_callback_user_denied(
         follow_redirects=False,
     )
     assert resp.status_code in (302, 307)
-    assert resp.headers["location"] == "/login?error=google_denied"
+    assert resp.headers["location"] == "http://localhost:5173/login?error=google_denied"
 
 
 async def test_google_callback_invalid_state(
@@ -632,7 +680,7 @@ async def test_google_callback_invalid_state(
         follow_redirects=False,
     )
     assert resp.status_code in (302, 307)
-    assert resp.headers["location"] == "/login?error=invalid_state"
+    assert resp.headers["location"] == "http://localhost:5173/login?error=invalid_state"
 
 
 async def test_google_callback_missing_state_cookie(
@@ -645,7 +693,7 @@ async def test_google_callback_missing_state_cookie(
         follow_redirects=False,
     )
     assert resp.status_code in (302, 307)
-    assert resp.headers["location"] == "/login?error=invalid_state"
+    assert resp.headers["location"] == "http://localhost:5173/login?error=invalid_state"
 
 
 async def test_google_callback_account_not_linked(
@@ -665,7 +713,7 @@ async def test_google_callback_account_not_linked(
         )
 
     assert resp.status_code in (302, 307)
-    assert resp.headers["location"] == "/login?error=google_not_linked"
+    assert resp.headers["location"] == "http://localhost:5173/login?error=google_not_linked"
 
 
 async def test_google_callback_linked_account_logs_in(
@@ -702,7 +750,7 @@ async def test_google_callback_linked_account_logs_in(
         )
 
     assert resp.status_code in (302, 307)
-    assert resp.headers["location"] == "/"
+    assert resp.headers["location"] == "http://localhost:5173/"
     # JWT cookie must be issued so the frontend can call /api/auth/me.
     assert "access_token" in resp.cookies
     # The one-time state cookie must be cleared.
@@ -725,7 +773,7 @@ async def test_google_callback_token_exchange_failure(
         )
 
     assert resp.status_code in (302, 307)
-    assert resp.headers["location"] == "/login?error=google_denied"
+    assert resp.headers["location"] == "http://localhost:5173/login?error=google_denied"
 
 
 # ---------------------------------------------------------------------------
@@ -734,12 +782,14 @@ async def test_google_callback_token_exchange_failure(
 
 
 async def test_link_google_not_configured(
-    client: AsyncClient, user_override
+    client: AsyncClient,
+    user_override: None,
+    no_google_settings: None,
 ) -> None:
     """Without Google OAuth configured, link-google returns 404."""
     resp = await client.post(
         "/api/auth/link-google",
-        json={"code": "any", "redirect_uri": "http://localhost/cb"},
+        json={"code": "any", "state": "any-state"},
     )
     assert resp.status_code == 404
 
@@ -757,13 +807,14 @@ async def test_link_google_success(
     from app.models.oauth_account import OAuthAccount
 
     fake_token_body = _make_google_token_response()
+    client.cookies.set("oauth_link_state", "test-link-state")
     with patch(
         "app.api.routes.auth.httpx.AsyncClient",
         return_value=_FakeHttpxClient(fake_token_body),
     ):
         resp = await client.post(
             "/api/auth/link-google",
-            json={"code": "valid-code", "redirect_uri": _GOOGLE_REDIRECT_URI},
+            json={"code": "valid-code", "state": "test-link-state"},
         )
 
     assert resp.status_code == 200, resp.text
@@ -807,13 +858,14 @@ async def test_link_google_idempotent(
     await engine.dispose()
 
     fake_token_body = _make_google_token_response()
+    client.cookies.set("oauth_link_state", "test-link-state")
     with patch(
         "app.api.routes.auth.httpx.AsyncClient",
         return_value=_FakeHttpxClient(fake_token_body),
     ):
         resp = await client.post(
             "/api/auth/link-google",
-            json={"code": "any-code", "redirect_uri": _GOOGLE_REDIRECT_URI},
+            json={"code": "any-code", "state": "test-link-state"},
         )
 
     assert resp.status_code == 200
@@ -855,17 +907,21 @@ async def test_link_google_duplicate_different_user(
 
     # Now test_user (via user_override) tries to claim the same Google identity.
     fake_token_body = _make_google_token_response()
+    client.cookies.set("oauth_link_state", "test-link-state")
     with patch(
         "app.api.routes.auth.httpx.AsyncClient",
         return_value=_FakeHttpxClient(fake_token_body),
     ):
         resp = await client.post(
             "/api/auth/link-google",
-            json={"code": "any-code", "redirect_uri": _GOOGLE_REDIRECT_URI},
+            json={"code": "any-code", "state": "test-link-state"},
         )
 
     assert resp.status_code == 409
-    assert "another user" in resp.json()["detail"].lower()
+    body = resp.json()
+    assert "code" in body
+    assert body["code"] == "auth.googleAlreadyLinked"
+    assert "another user" in body["detail"].lower()
 
 
 async def test_link_google_requires_auth(

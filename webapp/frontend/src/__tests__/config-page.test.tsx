@@ -58,7 +58,7 @@ describe("ConfigPage — model architecture contract", () => {
     expect(screen.getByText("UNet")).toBeInTheDocument();
   });
 
-  it("offers 'Double-UNet' as a model architecture option", async () => {
+  it("offers 'Double UNet' as a model architecture option", async () => {
     const user = userEvent.setup();
     renderConfigPage();
 
@@ -66,7 +66,10 @@ describe("ConfigPage — model architecture contract", () => {
     const trigger = screen.getByRole("combobox", { name: /architecture/i });
     await user.click(trigger);
 
-    expect(screen.getByRole("option", { name: "Double-UNet" })).toBeInTheDocument();
+    // Phase 3 migrated the label from the hard-coded "Double-UNet" string to the
+    // translation key job.model.doubleUnet, which maps to "Double UNet" (space,
+    // not hyphen) in both en.json and vi.json.
+    expect(screen.getByRole("option", { name: "Double UNet" })).toBeInTheDocument();
   });
 
   it("does not offer 'AttentionUNet' as a model architecture option", async () => {

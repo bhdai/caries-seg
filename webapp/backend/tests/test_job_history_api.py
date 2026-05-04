@@ -475,6 +475,9 @@ async def test_rerun_not_found(client: AsyncClient) -> None:
     missing_id = uuid.uuid4()
     resp = await client.post(f"/api/jobs/{missing_id}/rerun")
     assert resp.status_code == 404
+    body = resp.json()
+    assert "code" in body
+    assert body["code"] == "jobs.notFound"
 
 
 async def test_rerun_fails_when_upload_file_missing(
@@ -496,7 +499,10 @@ async def test_rerun_fails_when_upload_file_missing(
 
     resp = await client.post(f"/api/jobs/{source_id}/rerun")
     assert resp.status_code == 409
-    assert "no longer available" in resp.json()["detail"]
+    body = resp.json()
+    assert "no longer available" in body["detail"]
+    assert "code" in body
+    assert body["code"] == "jobs.sourceUnavailable"
 
     # The list must still contain only the original job (no partial new row).
     list_resp = await client.get("/api/jobs")

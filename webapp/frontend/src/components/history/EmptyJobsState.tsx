@@ -16,6 +16,7 @@
 import { Button } from "@/components/ui/button";
 import { ClipboardList, SearchX, UploadCloud } from "lucide-react";
 import { Link } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -55,6 +56,7 @@ export function EmptyJobsState({ hasFilters, onResetFilters }: EmptyJobsStatePro
 // ---------------------------------------------------------------------------
 
 function FirstUseEmpty() {
+  const { t } = useTranslation();
   return (
     <div className="py-16 flex flex-col items-center gap-4 text-center">
       <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
@@ -62,17 +64,16 @@ function FirstUseEmpty() {
       </div>
 
       <div className="space-y-1 max-w-xs">
-        <p className="text-sm font-medium">No inference jobs yet</p>
+        <p className="text-sm font-medium">{t("emptyJobs.firstUseTitle")}</p>
         <p className="text-xs text-muted-foreground">
-          Upload a dental X-ray to run your first caries segmentation job. Results
-          will appear here once the job completes.
+          {t("emptyJobs.firstUseDescription")}
         </p>
       </div>
 
       <Button asChild size="sm">
         <Link to="/upload">
           <UploadCloud className="h-4 w-4 mr-1.5" />
-          Upload X-ray
+          {t("emptyJobs.uploadButton")}
         </Link>
       </Button>
     </div>
@@ -88,6 +89,7 @@ interface NoResultsEmptyProps {
 }
 
 function NoResultsEmpty({ onReset }: NoResultsEmptyProps) {
+  const { t } = useTranslation();
   return (
     <div className="py-16 flex flex-col items-center gap-4 text-center">
       <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
@@ -95,15 +97,14 @@ function NoResultsEmpty({ onReset }: NoResultsEmptyProps) {
       </div>
 
       <div className="space-y-1 max-w-xs">
-        <p className="text-sm font-medium">No matching jobs</p>
+        <p className="text-sm font-medium">{t("emptyJobs.noResultsTitle")}</p>
         <p className="text-xs text-muted-foreground">
-          No jobs match the current filters or search text.  Try adjusting your
-          criteria or clear all filters to see all jobs.
+          {t("emptyJobs.noResultsDescription")}
         </p>
       </div>
 
       <Button variant="outline" size="sm" onClick={onReset}>
-        Reset filters
+        {t("emptyJobs.resetButton")}
       </Button>
     </div>
   );

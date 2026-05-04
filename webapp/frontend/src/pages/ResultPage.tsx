@@ -46,19 +46,12 @@ import {
 import { useCallback, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useParams } from "react-router-dom";
-
-const PIPELINE_LABELS: Record<string, string> = {
-  single_stage: "Single Stage",
-  two_stage: "Two Stage",
-};
-const ARCH_LABELS: Record<string, string> = {
-  unet: "UNet",
-  double_unet: "Double-UNet",
-};
+import { useTranslation } from "react-i18next";
 
 export default function ResultPage() {
   const { jobId } = useParams<{ jobId: string }>();
   const startNewJob = useStartNewJob();
+  const { t } = useTranslation();
 
   const { data: job, error } = useJobDetailQuery(jobId);
 
@@ -139,7 +132,7 @@ export default function ResultPage() {
     async (resultId: string) => {
       const handle = canvasRefs.current.get(resultId);
       if (!handle) {
-        toast.error("Could not export image — canvas not available.");
+        toast.error(t("result.export.canvasNotAvailable"));
         return;
       }
       const result = job?.image_results.find((r) => r.id === resultId);
@@ -147,7 +140,7 @@ export default function ResultPage() {
       try {
         await exportSingleResultPng(filename, () => handle.exportPngBlob());
       } catch {
-        toast.error(`Failed to export "${filename}".`);
+        toast.error(t("result.export.singleFailed", { filename }));
       }
     },
     [job],
@@ -252,18 +245,18 @@ export default function ResultPage() {
       {/* ------------------------------------------------------------------ */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Results</h1>
+          <h1 className="text-3xl font-bold tracking-tight">{t("result.title")}</h1>
           {job && (
             <p className="text-muted-foreground mt-1 text-sm">
-              {PIPELINE_LABELS[job.pipeline_type] ?? job.pipeline_type} ·{" "}
-              {ARCH_LABELS[job.model_arch] ?? job.model_arch}
+              {job.pipeline_type === "two_stage" ? t("job.pipeline.two") : t("job.pipeline.single")} {"·"}{" "}
+              {job.model_arch === "double_unet" ? t("job.model.doubleUnet") : t("job.model.unet")}
             </p>
           )}
         </div>
         <div className="flex items-center gap-3">
           {job && <JobStatusChip status={job.status} />}
           <Button variant="outline" size="sm" onClick={startNewJob}>
-            New Job
+            {t("nav.newJob")}
           </Button>
         </div>
       </div>
@@ -284,7 +277,7 @@ export default function ResultPage() {
       {job?.status === "failed" && job.error_message && (
         <Alert variant="destructive">
           <AlertDescription>
-            <strong>Inference failed:</strong> {job.error_message}
+            <strong>{t("result.failurePrefix")}</strong> {job.error_message}
           </AlertDescription>
         </Alert>
       )}
@@ -296,7 +289,7 @@ export default function ResultPage() {
         <Card>
           <CardContent className="py-12 flex flex-col items-center gap-4">
             <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-            <p className="text-muted-foreground text-sm">Loading job…</p>
+            <p className="text-muted-foreground text-sm">{t("result.loading")}</p>
           </CardContent>
         </Card>
       )}
@@ -316,7 +309,7 @@ export default function ResultPage() {
                 onCheckedChange={setShowBoundingBoxes}
                 aria-label="Show bounding boxes"
               />
-              <Label htmlFor="show-bounding-boxes">Show bounding boxes</Label>
+              <Label htmlFor="show-bounding-boxes">{t("result.showBboxes")}</Label>
             </div>
           )}
         </div>
