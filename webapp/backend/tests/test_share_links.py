@@ -144,7 +144,7 @@ async def test_create_share_link(
     user_override: None,
     test_job: Job,
 ) -> None:
-    """1. POST /api/share-links for own job → 201, token and url present."""
+    """1. POST /api/share-links for own job → 201 with active link payload."""
     resp = await client.post(
         "/api/share-links",
         json={"job_id": str(test_job.id), "expires_in_days": 30},
@@ -153,9 +153,7 @@ async def test_create_share_link(
     data = resp.json()
     assert "token" in data
     assert len(data["token"]) > 0
-    assert "url" in data
-    assert "/shared/" in data["url"]
-    assert data["is_expired"] is False
+    assert data["is_active"] is True
     assert data["job_id"] == str(test_job.id)
 
 
@@ -219,7 +217,7 @@ async def test_create_share_link_no_expiry(
     assert resp.status_code == 201
     data = resp.json()
     assert data["expires_at"] is None
-    assert data["is_expired"] is False
+    assert data["is_active"] is True
 
 
 @pytest.mark.asyncio
@@ -293,10 +291,10 @@ async def test_public_access_valid_token(
     data = resp.json()
     # Required fields present.
     assert "scan_date" in data
-    assert "images" in data
-    assert isinstance(data["images"], list)
-    assert len(data["images"]) == 1
-    assert data["images"][0]["original_filename"] == "xray.jpg"
+    assert "image_results" in data
+    assert isinstance(data["image_results"], list)
+    assert len(data["image_results"]) == 1
+    assert data["image_results"][0]["original_filename"] == "xray.jpg"
 
 
 @pytest.mark.asyncio

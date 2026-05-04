@@ -39,6 +39,7 @@ from app.models.patient import Patient
 from app.models.share_link import ShareLink
 from app.models.user import User, UserRole
 from app.schemas.share_link import (
+    PatientShareLinkSummary,
     ShareLinkResponse,
     SharedImageResult,
     SharedResultResponse,
@@ -55,11 +56,11 @@ logger = logging.getLogger(__name__)
 def _build_share_link_response(link: ShareLink, settings: Settings) -> ShareLinkResponse:
     """Construct a ``ShareLinkResponse`` from an ORM ``ShareLink`` instance.
 
-    The ``url`` and ``is_expired`` fields are derived here rather than stored
-    in the database, so this helper centralises the computation in one place.
+    ``is_active`` is derived from ``expires_at`` so the frontend can reuse the
+    same field across create and lookup flows without doing its own time math.
     """
     now = datetime.now(tz=timezone.utc)
-    is_expired = (
+    is_active = not (
         link.expires_at is not None
         and link.expires_at.replace(tzinfo=timezone.utc) < now
     )
@@ -67,13 +68,27 @@ def _build_share_link_response(link: ShareLink, settings: Settings) -> ShareLink
         id=link.id,
         job_id=link.job_id,
         token=link.token,
-        url=f"{settings.FRONTEND_URL}/shared/{link.token}",
         expires_at=link.expires_at,
-        is_expired=is_expired,
         created_at=link.created_at,
-        created_by_username=(
-            link.created_by.username if link.created_by is not None else None
-        ),
+        is_active=is_active,
+    )
+
+
+def _build_patient_share_link_summary(link: ShareLink, settings: Settings) -> PatientShareLinkSummary:
+    """Construct a patient-detail share-link row with embedded job context."""
+    response = _build_share_link_response(link, settings)
+    assert link.job is not None, "share-link patient summary requires the linked job"
+
+    filenames = [image.original_filename for image in link.job.image_results]
+    return PatientShareLinkSummary(
+        id=response.id,
+        job_id=response.job_id,
+        token=response.token,
+        expires_at=response.expires_at,
+        created_at=response.created_at,
+        is_active=response.is_active,
+        job_date=link.job.created_at,
+        job_primary_filename=filenames[0] if filenames else "",
     )
 
 
@@ -292,7 +307,7 @@ async def list_share_links_for_patient(
     patient_id: uuid.UUID,
     db: AsyncSession,
     settings: Settings,
-) -> list[ShareLinkResponse]:
+) -> list[PatientShareLinkSummary]:
     """Return all share links (active and expired) for jobs belonging to a patient.
 
     Results are ordered by creation time, newest first, so the most recently
@@ -304,7 +319,7 @@ async def list_share_links_for_patient(
         settings: Application settings (provides ``FRONTEND_URL``).
 
     Returns:
-        List of ``ShareLinkResponse`` objects (may be empty).
+        List of patient-detail share-link rows (may be empty).
     """
     result = await db.execute(
         select(ShareLink)
@@ -313,10 +328,11 @@ async def list_share_links_for_patient(
         # Eagerly load the creator so _build_share_link_response can read
         # the username without requiring lazy-load after session close.
         .options(selectinload(ShareLink.created_by))
+        .options(selectinload(ShareLink.job).selectinload(Job.image_results))
         .order_by(ShareLink.created_at.desc())
     )
     links = result.scalars().all()
-    return [_build_share_link_response(link, settings) for link in links]
+    return [_build_patient_share_link_summary(link, settings) for link in links]
 
 
 # ==============================================================================
@@ -416,7 +432,7 @@ async def get_public_result(token: str, db: AsyncSession) -> SharedResultRespons
         if patient is not None:
             patient_name = patient.full_name
 
-    images = [
+    image_results = [
         SharedImageResult(
             id=ir.id,
             original_filename=ir.original_filename,
@@ -430,7 +446,9 @@ async def get_public_result(token: str, db: AsyncSession) -> SharedResultRespons
     return SharedResultResponse(
         patient_name=patient_name,
         scan_date=job.created_at,
-        images=images,
+        pipeline_type=job.pipeline_type,
+        expires_at=link.expires_at,
+        image_results=image_results,
     )
 
 

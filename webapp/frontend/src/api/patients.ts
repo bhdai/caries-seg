@@ -79,9 +79,10 @@ export interface PatientDetailResponse {
   updated_at: string;
   // Linked scan history — compact summaries sufficient for the scan table.
   jobs: JobSummary[];
-  // TODO(phase-4): Replace unknown[] with ShareLinkResponse[] once the
-  // share-links API and type are introduced.
-  share_links: unknown[];
+  // Active and recently revoked share links across all of this patient's jobs.
+  // Includes embedded job context (date, primary filename) so ShareLinksTable
+  // can render without an additional fetch per link.
+  share_links: import("@/api/shareLinks").PatientShareLinkSummary[];
 }
 
 /** Payload for creating a new patient record. */

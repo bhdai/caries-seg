@@ -19,10 +19,12 @@ from fastapi import HTTPException
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import Settings
 from app.core.exceptions import AppError
 from app.models.image_result import ImageResult
 from app.models.job import Job
 from app.models.patient import Patient
+from app.services.share_links import list_share_links_for_patient
 from app.schemas.patient import (
     CreatePatientRequest,
     PatientDetailResponse,
@@ -206,16 +208,16 @@ async def list_patients(
 async def get_patient_detail(
     patient_id: uuid.UUID,
     db: AsyncSession,
+    settings: Settings,
 ) -> PatientDetailResponse:
     """Return full patient detail including linked jobs and active share links.
 
     Jobs are returned most-recent-first (by ``created_at``), limited to 20.
-    Share links are always an empty list in Phase 1; the share link service
-    populates this in Phase 2.
 
     Args:
         patient_id: UUID of the patient to load.
         db: Active async database session.
+        settings: Application settings used to map share-link rows.
 
     Raises:
         AppError 404: Patient not found or has been soft-deleted.
@@ -240,29 +242,42 @@ async def get_patient_detail(
     )
     jobs = list(jobs_result.scalars().all())
 
-    job_summaries: list[PatientJobSummary] = [
-        PatientJobSummary(
-            id=job.id,
-            status=job.status,
-            pipeline_type=job.pipeline_type,
-            model_arch=job.model_arch,
-            image_count=len(job.image_results),
-            primary_filename=(
-                job.image_results[0].original_filename if job.image_results else ""
-            ),
-            created_at=job.created_at,
-            # TODO (Phase 2): set has_share_link = True when an active
-            # share link exists for this job.
-            has_share_link=False,
+    share_links = await list_share_links_for_patient(patient_id, db, settings)
+    active_share_link_job_ids = {
+        link.job_id for link in share_links if link.is_active
+    }
+
+    job_summaries: list[PatientJobSummary] = []
+    for job in jobs:
+        filenames = [image.original_filename for image in job.image_results]
+        job_summaries.append(
+            PatientJobSummary(
+                id=job.id,
+                status=job.status,
+                pipeline_type=job.pipeline_type,
+                model_arch=job.model_arch,
+                created_at=job.created_at,
+                last_activity_at=job.updated_at,
+                image_count=len(job.image_results),
+                primary_filename=filenames[0] if filenames else "",
+                filename_preview=filenames[:3],
+                error_message=job.error_message,
+                patient_id=job.patient_id,
+                patient_name=job.patient_name,
+                has_share_link=job.id in active_share_link_job_ids,
+            )
         )
-        for job in jobs
-    ]
 
     return PatientDetailResponse(
-        patient=PatientResponse.model_validate(patient),
+        id=patient.id,
+        full_name=patient.full_name,
+        date_of_birth=patient.date_of_birth,
+        phone=patient.phone,
+        notes=patient.notes,
+        created_at=patient.created_at,
+        updated_at=patient.updated_at,
         jobs=job_summaries,
-        # Phase 2 will populate this from the share_links service.
-        share_links=[],
+        share_links=share_links,
     )
 
 

@@ -182,8 +182,8 @@ async def test_get_patient_detail(
     resp = await client.get(f"/api/patients/{test_patient.id}")
     assert resp.status_code == 200
     data = resp.json()
-    assert data["patient"]["id"] == str(test_patient.id)
-    assert data["patient"]["full_name"] == test_patient.full_name
+    assert data["id"] == str(test_patient.id)
+    assert data["full_name"] == test_patient.full_name
     assert isinstance(data["jobs"], list)
     assert isinstance(data["share_links"], list)
 

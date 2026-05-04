@@ -13,6 +13,8 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, Field
 
+from app.schemas.share_link import PatientShareLinkSummary
+
 
 # ---------------------------------------------------------------------------
 # Request bodies
@@ -114,34 +116,30 @@ class PatientsPageResponse(BaseModel):
 class PatientJobSummary(BaseModel):
     """Compact job representation within a patient detail context.
 
-    Intentionally lighter than ``JobSummaryResponse`` — only the fields
-    relevant on the patient detail page are included.
+    This mirrors the frontend's shared ``JobSummary`` contract closely so the
+    patient detail page can reuse the same table-rendering assumptions as the
+    dashboard and history surfaces.
     """
 
     id: uuid.UUID
     status: str
     pipeline_type: str
     model_arch: str
+    last_activity_at: datetime
     image_count: int
     primary_filename: str
+    filename_preview: list[str]
+    error_message: str | None
+    patient_id: uuid.UUID | None = None
+    patient_name: str | None = None
     created_at: datetime
     # True if at least one active (non-expired) share link exists for this job.
-    # Always False in Phase 1; set to True by the share link service in Phase 2.
     has_share_link: bool
 
 
-class PatientDetailResponse(BaseModel):
-    """Full patient detail including linked jobs and active share links.
+class PatientDetailResponse(PatientResponse):
+    """Full patient detail including linked jobs and patient share links."""
 
-    ``share_links`` lists all active share links across this patient's jobs.
-    In Phase 1 this list is always empty; it is populated by the share link
-    service in Phase 2.
-    """
-
-    patient: PatientResponse
     # Most recent jobs first, limited to 20 by default.
     jobs: list[PatientJobSummary]
-    # All active share links across this patient's jobs.
-    share_links: list  # list[ShareLinkResponse] — typed as list to avoid
-    # a circular import between schemas.  The concrete type is enforced
-    # at the service layer which constructs ShareLinkResponse instances.
+    share_links: list[PatientShareLinkSummary]

@@ -83,6 +83,12 @@ export interface JobSummary {
   patient_id: string | null;
   /** Display name of the linked patient, or null when unlinked. */
   patient_name: string | null;
+  /**
+   * True when the job has at least one active share link.
+   * Used by PatientScanHistory to display a share indicator icon per row.
+   * Optional because older API responses may omit this field.
+   */
+  has_share_link?: boolean;
 }
 
 // ---------------------------------------------------------------------------

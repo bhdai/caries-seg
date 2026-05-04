@@ -18,11 +18,12 @@
 import { getPatientDetail } from "@/api/patients";
 import { PatientDemographics } from "@/components/patients/PatientDemographics";
 import { PatientScanHistory } from "@/components/patients/PatientScanHistory";
+import { ShareLinksTable } from "@/components/share/ShareLinksTable";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
@@ -49,6 +50,7 @@ export const patientDetailQueryKeys = {
 export default function PatientDetailPage() {
   const { patientId } = useParams<{ patientId: string }>();
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
 
   const queryKey = patientDetailQueryKeys.detail(patientId ?? "");
 
@@ -133,10 +135,15 @@ export default function PatientDetailPage() {
           <PatientDemographics patient={patient} queryKey={queryKey} />
 
           {/* Linked scan history */}
-          <PatientScanHistory jobs={patient.jobs} />
+          <PatientScanHistory jobs={patient.jobs} patientName={patient.full_name} />
 
-          {/* TODO(phase-4): Replace with <ShareLinksTable /> when the
-              share-links feature is implemented. */}
+          {/* Share links — active and recently expired share links for this patient */}
+          <ShareLinksTable
+            shareLinks={patient.share_links}
+            onRevokeSuccess={() => {
+              void queryClient.invalidateQueries({ queryKey });
+            }}
+          />
         </>
       )}
     </div>

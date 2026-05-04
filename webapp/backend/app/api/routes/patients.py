@@ -18,6 +18,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_current_user, require_admin
+from app.core.config import Settings, get_settings
 from app.core.database import get_db
 from app.models.user import User
 from app.schemas.patient import (
@@ -107,13 +108,14 @@ async def get_patient(
     patient_id: uuid.UUID,
     db: Annotated[AsyncSession, Depends(get_db)],
     _user: Annotated[User, Depends(get_current_user)],
+    settings: Annotated[Settings, Depends(get_settings)],
 ) -> PatientDetailResponse:
     """Return full patient detail including linked jobs and active share links.
 
     Raises:
         HTTPException 404: Patient not found or has been soft-deleted.
     """
-    return await patients_service.get_patient_detail(patient_id, db)
+    return await patients_service.get_patient_detail(patient_id, db, settings)
 
 
 # ---------------------------------------------------------------------------

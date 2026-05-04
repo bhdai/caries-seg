@@ -13,6 +13,7 @@
 // "Go to Upload" link to guide the doctor to the workflow start.
 
 import { JobStatusChip } from "@/components/jobs/JobStatusChip";
+import { ShareModal } from "@/components/share/ShareModal";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -30,8 +31,9 @@ import {
 } from "@/components/ui/table";
 import type { JobSummary } from "@/api/types";
 import { formatRelativeTime, formatAbsoluteTime } from "@/lib/time";
-import { ExternalLink, UploadCloud } from "lucide-react";
+import { ExternalLink, Share2, UploadCloud } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 // ---------------------------------------------------------------------------
@@ -41,6 +43,8 @@ import { useTranslation } from "react-i18next";
 interface PatientScanHistoryProps {
   /** Compact job summaries linked to this patient. */
   jobs: JobSummary[];
+  /** Display name of the patient — passed to ShareModal. */
+  patientName: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -52,12 +56,18 @@ interface PatientScanHistoryProps {
  *
  * The component is presentational — it receives the job list from
  * PatientDetailPage and fires navigate() for the "View Result" action.
+ * A "Share" button per row opens a ShareModal pre-populated with the job.
  */
-export function PatientScanHistory({ jobs }: PatientScanHistoryProps) {
+export function PatientScanHistory({ jobs, patientName }: PatientScanHistoryProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
 
+  // Track which job's share modal is open.  Only one modal is open at a time.
+  const [shareJobId, setShareJobId] = useState<string | null>(null);
+  const [shareJobDate, setShareJobDate] = useState<string | undefined>(undefined);
+
   return (
+    <>
     <Card>
       <CardHeader>
         <CardTitle className="text-base">{t("patient.scanHistory.title")}</CardTitle>
@@ -91,8 +101,7 @@ export function PatientScanHistory({ jobs }: PatientScanHistoryProps) {
                 <TableHead>{t("jobsTable.colPipelineModel")}</TableHead>
                 <TableHead className="text-right">{t("patient.scanHistory.colActions")}</TableHead>
               </TableRow>
-            </TableHeader>
-            <TableBody>
+            </TableHeader>            <TableBody>
               {jobs.map((job) => (
                 <TableRow
                   key={job.id}
@@ -147,19 +156,53 @@ export function PatientScanHistory({ jobs }: PatientScanHistoryProps) {
                     </div>
                   </TableCell>
 
-                  {/* View Result action */}
+                  {/* Actions — View Result and Share */}
                   <TableCell
                     className="text-right"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => navigate(`/result/${job.id}`)}
-                    >
-                      <ExternalLink className="h-4 w-4 mr-1.5" />
-                      {t("patient.scanHistory.viewResult")}
-                    </Button>
+                    <div className="flex items-center justify-end gap-1">
+                      {/* Share button — opens ShareModal for this job */}
+                      {job.status === "completed" && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setShareJobId(job.id);
+                            setShareJobDate(job.created_at);
+                          }}
+                          aria-label={t("patient.scanHistory.share")}
+                          title={t("patient.scanHistory.share")}
+                        >
+                          {/* Show a filled share icon when an active link exists */}
+                          <Share2
+                            className={
+                              job.has_share_link
+                                ? "h-4 w-4 text-primary"
+                                : "h-4 w-4"
+                            }
+                          />
+                          <span className="ml-1.5 hidden sm:inline">
+                            {t("patient.scanHistory.share")}
+                          </span>
+                          {job.has_share_link && (
+                            <span
+                              className="ml-1 h-1.5 w-1.5 rounded-full bg-primary"
+                              aria-label={t("patient.scanHistory.hasShareLink")}
+                            />
+                          )}
+                        </Button>
+                      )}
+
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => navigate(`/result/${job.id}`)}
+                      >
+                        <ExternalLink className="h-4 w-4 mr-1.5" />
+                        {t("patient.scanHistory.viewResult")}
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -168,5 +211,17 @@ export function PatientScanHistory({ jobs }: PatientScanHistoryProps) {
         )}
       </CardContent>
     </Card>
+
+    {/* Share modal — opened when the doctor clicks "Share" on a completed job */}
+    {shareJobId && (
+      <ShareModal
+        open={shareJobId !== null}
+        onOpenChange={(open) => { if (!open) setShareJobId(null); }}
+        jobId={shareJobId}
+        patientName={patientName}
+        scanDate={shareJobDate}
+      />
+    )}
+  </>
   );
 }

@@ -44,11 +44,13 @@ import {
   exportSingleResultPng,
 } from "@/lib/resultExport";
 import { PatientLinkModal } from "@/components/patients/PatientLinkModal";
+import { ShareModal } from "@/components/share/ShareModal";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { useTranslation } from "react-i18next";
+import { Share2 } from "lucide-react";
 
 export default function ResultPage() {
   const { jobId } = useParams<{ jobId: string }>();
@@ -60,6 +62,9 @@ export default function ResultPage() {
 
   // Link-patient modal state
   const [linkModalOpen, setLinkModalOpen] = useState(false);
+
+  // Share modal state
+  const [shareModalOpen, setShareModalOpen] = useState(false);
 
   const fetchError =
     error instanceof Error ? error.message : error ? "Failed to fetch job." : null;
@@ -261,6 +266,17 @@ export default function ResultPage() {
         </div>
         <div className="flex items-center gap-3">
           {job && <JobStatusChip status={job.status} />}
+          {/* Share with Patient — only visible for completed jobs */}
+          {job?.status === "completed" && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShareModalOpen(true)}
+            >
+              <Share2 className="h-4 w-4 mr-1.5" />
+              {t("result.shareWithPatient")}
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={startNewJob}>
             {t("nav.newJob")}
           </Button>
@@ -424,6 +440,17 @@ export default function ResultPage() {
               queryKey: jobDetailQueryKeys.detail(job.id),
             });
           }}
+        />
+      )}
+
+      {/* Share modal — opened when "Share with Patient" is clicked */}
+      {job && (
+        <ShareModal
+          open={shareModalOpen}
+          onOpenChange={setShareModalOpen}
+          jobId={job.id}
+          patientName={job.patient_name}
+          scanDate={job.created_at}
         />
       )}
     </div>

@@ -11,7 +11,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 
 class CreateShareLinkRequest(BaseModel):
@@ -24,24 +24,38 @@ class CreateShareLinkRequest(BaseModel):
 
 
 class ShareLinkResponse(BaseModel):
-    """Full share link payload returned by create and list endpoints.
+    """Active-share-link payload returned by create and get-by-job endpoints.
 
-    ``url`` is a computed field constructed from the frontend base URL and
-    the token.  ``is_expired`` is also computed so clients don't need to
-    do their own timestamp arithmetic.
+    The frontend derives the public URL locally from ``token`` and treats
+    ``is_active`` as the canonical status flag for both create and lookup.
     """
 
     id: uuid.UUID
     job_id: uuid.UUID
     token: str
-    # Fully-qualified URL the patient opens: {FRONTEND_URL}/shared/{token}.
-    url: str
     expires_at: datetime | None
-    # True if expires_at is set and is in the past.
-    is_expired: bool
     created_at: datetime
-    # Username of the creating user; None if the user account was deleted.
-    created_by_username: str | None
+    # True when the link has not expired or been revoked.
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class PatientShareLinkSummary(BaseModel):
+    """Share-link row embedded in the patient detail response.
+
+    Includes enough job context for the patient-detail table to render each
+    row without issuing another request per link.
+    """
+
+    id: uuid.UUID
+    job_id: uuid.UUID
+    token: str
+    expires_at: datetime | None
+    created_at: datetime
+    is_active: bool
+    job_date: datetime
+    job_primary_filename: str
 
     model_config = {"from_attributes": True}
 
@@ -80,4 +94,6 @@ class SharedResultResponse(BaseModel):
     patient_name: str | None
     # Job creation time used as the "scan date" shown to the patient.
     scan_date: datetime
-    images: list[SharedImageResult]
+    pipeline_type: str
+    expires_at: datetime | None
+    image_results: list[SharedImageResult]
