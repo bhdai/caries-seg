@@ -28,6 +28,9 @@ if str(MONOREPO_ROOT) not in sys.path:
 from app.core.config import get_settings
 from app.core.security import hash_password
 from app.main import create_app
+from app.models.job import Job, JobStatus
+from app.models.image_result import ImageResult
+from app.models.patient import Patient
 from app.models.user import User
 
 # Plain-text passwords used when provisioning test fixtures.  Stored as
@@ -36,7 +39,7 @@ _TEST_USER_PASSWORD = "Password1!"
 _TEST_ADMIN_PASSWORD = "AdminPass1!"
 
 _TRUNCATE_ALL_TABLES = (
-    "TRUNCATE TABLE users, oauth_accounts, image_results, jobs RESTART IDENTITY CASCADE"
+    "TRUNCATE TABLE users, oauth_accounts, image_results, jobs, patients, share_links RESTART IDENTITY CASCADE"
 )
 
 
@@ -237,3 +240,78 @@ async def admin_override(_app: FastAPI, test_admin: User) -> AsyncIterator[None]
     _app.dependency_overrides[get_current_user] = lambda: test_admin
     yield
     _app.dependency_overrides.pop(get_current_user, None)
+
+
+# ---------------------------------------------------------------------------
+# Patient fixtures
+# ---------------------------------------------------------------------------
+
+
+@pytest_asyncio.fixture
+async def test_patient(database_url: str, reset_database: None) -> AsyncIterator[Patient]:
+    """Create a single active patient directly in the test database.
+
+    Returns the Patient ORM instance with all server-generated fields
+    populated.  The patient is NOT soft-deleted.
+    """
+    engine = create_async_engine(database_url)
+    async with AsyncSession(engine, expire_on_commit=False) as session:
+        patient = Patient(
+            full_name="Test Patient",
+            phone="0901234567",
+        )
+        session.add(patient)
+        await session.commit()
+        await session.refresh(patient)
+        yield patient
+    await engine.dispose()
+
+
+@pytest_asyncio.fixture
+async def test_patient_with_jobs(
+    database_url: str,
+    reset_database: None,
+    test_user: User,
+) -> AsyncIterator[tuple[Patient, list[Job]]]:
+    """Create a patient linked to three jobs (completed, pending, failed).
+
+    Each job has one ImageResult with minimal required fields so
+    ``_job_to_summary`` can construct the ``primary_filename`` field.
+
+    Returns ``(patient, [completed_job, pending_job, failed_job])``.
+    """
+    import uuid as _uuid
+
+    engine = create_async_engine(database_url)
+    async with AsyncSession(engine, expire_on_commit=False) as session:
+        patient = Patient(full_name="Patient With Jobs", phone="0912345678")
+        session.add(patient)
+        await session.flush()
+
+        jobs: list[Job] = []
+        for status in (JobStatus.completed, JobStatus.pending, JobStatus.failed):
+            job = Job(
+                status=status,
+                pipeline_type="single_stage",
+                model_arch="unet",
+                owner_id=test_user.id,
+                patient_id=patient.id,
+            )
+            session.add(job)
+            await session.flush()
+
+            image_result = ImageResult(
+                job_id=job.id,
+                original_filename=f"scan_{status}.jpg",
+                upload_path=f"/storage/{job.id}/upload.jpg",
+                original_size={"width": 1024, "height": 512},
+            )
+            session.add(image_result)
+            jobs.append(job)
+
+        await session.commit()
+        for job in jobs:
+            await session.refresh(job)
+        await session.refresh(patient)
+        yield patient, jobs
+    await engine.dispose()

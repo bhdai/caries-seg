@@ -28,8 +28,9 @@ from app.core.storage import StorageError, save_display_copy, save_upload
 from app.inference.worker import run_inference
 from app.models.image_result import ImageResult
 from app.models.job import Job, JobStatus
+from app.models.patient import Patient
 from app.models.user import User
-from app.schemas.job import JobResponse, ModelArchField, PipelineTypeField
+from app.schemas.job import JobResponse, ModelArchField, PatchJobRequest, PipelineTypeField
 from app.schemas.job_history import (
     JobListQuery,
     JobsPageResponse,
@@ -76,6 +77,7 @@ async def create_job(
     db: Annotated[AsyncSession, Depends(get_db)],
     settings: Annotated[Settings, Depends(get_settings)],
     current_user: Annotated[User, Depends(get_current_user)],
+    patient_id: Annotated[uuid.UUID | None, Form()] = None,
 ) -> JobResponse:
     """Accept an inference job submission.
 
@@ -88,9 +90,31 @@ async def create_job(
 
     Raises:
         HTTPException 413: Any file exceeds 10 MB.
-        HTTPException 422: Any file has a disallowed MIME type or cannot
-            be decoded as a valid image.
+        HTTPException 422: Any file has a disallowed MIME type, cannot be
+            decoded as a valid image, or ``patient_id`` refers to a patient
+            that does not exist or has been soft-deleted.
     """
+    # ------------------------------------------------------------------
+    # Phase 0 — validate patient_id if provided.
+    #
+    # Performed before touching files or the database so that an invalid
+    # patient_id returns a clean 422 with no side effects.
+    # ------------------------------------------------------------------
+    if patient_id is not None:
+        from sqlalchemy.future import select as sa_select
+
+        p_result = await db.execute(
+            sa_select(Patient).where(
+                Patient.id == patient_id,
+                Patient.deleted_at.is_(None),
+            )
+        )
+        if p_result.scalar_one_or_none() is None:
+            raise AppError(
+                status_code=422,
+                code="jobs.patientNotFound",
+                detail="Patient not found.",
+            )
     # ------------------------------------------------------------------
     # Phase 1 — validate all files before touching the database or disk.
     #
@@ -154,6 +178,8 @@ async def create_job(
         # Stamp the submitting user so this job is visible only to them (or
         # to admins) via the ownership filter in the service layer.
         owner_id=current_user.id,
+        # Link to the patient if provided; None is valid (unlinked job).
+        patient_id=patient_id,
     )
     db.add(job)
 
@@ -259,6 +285,7 @@ def _parse_list_query(
     model_arch: Annotated[ModelFilter, Query()] = "all",
     search: Annotated[str | None, Query(max_length=200)] = None,
     sort: Annotated[SortOrder, Query()] = "last_activity_desc",
+    patient_id: Annotated[uuid.UUID | None, Query()] = None,
 ) -> JobListQuery:
     """Construct a validated ``JobListQuery`` from individual query parameters.
 
@@ -273,6 +300,7 @@ def _parse_list_query(
         model_arch=model_arch,
         search=search,
         sort=sort,
+        patient_id=patient_id,
     )
 
 
@@ -357,3 +385,59 @@ async def delete_job(
         HTTPException 404: No job with the given ID exists.
     """
     await jobs_service.delete_job(job_id, db, current_user)
+
+
+# ---------------------------------------------------------------------------
+# PATCH /api/jobs/{job_id}
+# ---------------------------------------------------------------------------
+
+
+@router.patch("/{job_id}", response_model=JobResponse)
+async def patch_job(
+    job_id: uuid.UUID,
+    body: PatchJobRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> JobResponse:
+    """Link or unlink a patient from an existing job.
+
+    Sends ``{ "patient_id": "<uuid>" }`` to link a patient, or
+    ``{ "patient_id": null }`` to remove an existing link.
+
+    Returns:
+        HTTP 200 with the updated full ``JobResponse`` payload.
+
+    Raises:
+        HTTPException 403: Caller does not own the job and is not an admin.
+        HTTPException 404: No job with the given ID exists.
+        HTTPException 422: ``patient_id`` refers to a patient that does not
+            exist or has been soft-deleted.
+    """
+    # Load the job and verify ownership.
+    result = await db.execute(select(Job).where(Job.id == job_id))
+    job = result.scalar_one_or_none()
+    if job is None:
+        raise AppError(status_code=404, code="jobs.notFound", detail=f"Job {job_id} not found.")
+
+    if current_user.role != "admin" and job.owner_id != current_user.id:
+        raise AppError(status_code=403, code="jobs.accessDenied", detail="Access denied.")
+
+    # Validate the patient if provided.
+    if body.patient_id is not None:
+        p_result = await db.execute(
+            select(Patient).where(
+                Patient.id == body.patient_id,
+                Patient.deleted_at.is_(None),
+            )
+        )
+        if p_result.scalar_one_or_none() is None:
+            raise AppError(
+                status_code=422,
+                code="jobs.patientNotFound",
+                detail="Patient not found.",
+            )
+
+    job.patient_id = body.patient_id
+    await db.commit()
+    await db.refresh(job)
+    return JobResponse.model_validate(job)

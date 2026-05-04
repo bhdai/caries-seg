@@ -10,6 +10,8 @@ from app.models.job import Job, JobStatus, ModelArch, PipelineType
 from app.models.image_result import ImageResult
 from app.models.user import User, UserRole
 from app.models.oauth_account import OAuthAccount
+from app.models.patient import Patient
+from app.models.share_link import ShareLink
 
 __all__ = [
     "Job",
@@ -20,4 +22,6 @@ __all__ = [
     "User",
     "UserRole",
     "OAuthAccount",
+    "Patient",
+    "ShareLink",
 ]

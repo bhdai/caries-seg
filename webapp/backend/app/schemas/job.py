@@ -23,8 +23,21 @@ class JobResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     image_results: list[ImageResultResponse]
+    # Populated when the job is linked to a patient; None otherwise.
+    patient_id: uuid.UUID | None = None
+    patient_name: str | None = None
 
     model_config = {"from_attributes": True}
+
+
+class PatchJobRequest(BaseModel):
+    """Validated body for ``PATCH /api/jobs/{job_id}``.
+
+    Sending ``patient_id=<uuid>`` links the job to that patient.
+    Sending ``patient_id=null`` removes any existing link.
+    """
+
+    patient_id: uuid.UUID | None = None
 
 
 # ---------------------------------------------------------------------------

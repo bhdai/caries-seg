@@ -36,6 +36,8 @@ class JobListQuery(BaseModel):
     model_arch: ModelFilter = "all"
     search: str | None = None
     sort: SortOrder = "last_activity_desc"
+    # When set, restricts the list to jobs linked to this patient.
+    patient_id: uuid.UUID | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -60,6 +62,9 @@ class JobSummaryResponse(BaseModel):
     primary_filename: str
     filename_preview: list[str]
     error_message: str | None
+    # Populated when the job is linked to a patient; None otherwise.
+    patient_id: uuid.UUID | None = None
+    patient_name: str | None = None
 
 
 class JobsPageResponse(BaseModel):
