@@ -25,6 +25,7 @@ export const DEFAULT_JOB_FILTERS: Readonly<JobFilters> = {
   modelArch: "all",
   search: "",
   sort: "last_activity_desc",
+  patientId: null,
 };
 
 // ---------------------------------------------------------------------------
@@ -76,7 +77,9 @@ export function parseFiltersFromParams(params: URLSearchParams): JobFilters {
     ? (rawSort as JobFilters["sort"])
     : DEFAULT_JOB_FILTERS.sort;
 
-  return { page, pageSize, status, pipelineType, modelArch, search, sort };
+  const patientId = params.get("patient_id") ?? DEFAULT_JOB_FILTERS.patientId;
+
+  return { page, pageSize, status, pipelineType, modelArch, search, sort, patientId };
 }
 
 // ---------------------------------------------------------------------------
@@ -101,6 +104,8 @@ export function filtersToParams(filters: JobFilters): URLSearchParams {
   if (filters.modelArch !== d.modelArch) params.set("model_arch", filters.modelArch);
   if (filters.search !== d.search) params.set("search", filters.search);
   if (filters.sort !== d.sort) params.set("sort", filters.sort);
+  if (filters.patientId !== d.patientId && filters.patientId !== null)
+    params.set("patient_id", filters.patientId);
 
   return params;
 }

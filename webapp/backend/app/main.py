@@ -4,6 +4,7 @@ Phase 2 additions:
   - ``init_db()`` called in the lifespan so the async engine is ready
     before the first request arrives.
   - API router mounted at ``/api``.
+  - ``SlowAPIMiddleware`` added for rate-limiting the public share endpoints.
 
 Phase 3 additions:
   - ``init_registry()`` called in the lifespan to eagerly load all model
@@ -22,6 +23,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 from sqlalchemy import func, select, update
 
 from app.core.config import get_settings
@@ -198,6 +202,22 @@ def create_app() -> FastAPI:
         )
 
     application.add_exception_handler(AppError, app_error_handler)  # type: ignore[arg-type]
+
+    # ------------------------------------------------------------------
+    # Rate limiting
+    #
+    # SlowAPIMiddleware intercepts requests before route handlers run and
+    # checks the per-IP counters maintained by the Limiter.  The Limiter
+    # instance is imported from the share routes module and stored on
+    # ``app.state`` so that slowapi's decorator machinery can find it.
+    # Only the public shared-result endpoints are decorated with
+    # ``@limiter.limit``; all other endpoints are unaffected.
+    # ------------------------------------------------------------------
+    from app.api.routes.share import limiter as share_limiter
+
+    application.state.limiter = share_limiter
+    application.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
+    application.add_middleware(SlowAPIMiddleware)
 
     from app.api.routes import router
 

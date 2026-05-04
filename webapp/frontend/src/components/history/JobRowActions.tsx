@@ -34,7 +34,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { ExternalLink, MoreHorizontal, RotateCcw, Trash2 } from "lucide-react";
+import { ExternalLink, Link2, Link2Off, MoreHorizontal, RotateCcw, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -49,6 +49,12 @@ interface JobRowActionsProps {
   /** True while a rerun mutation is in flight for this specific job. */
   isRerunPending: boolean;
 
+  /** The linked patient id, or null if this job has no patient. */
+  patientId: string | null;
+
+  /** The linked patient full name, or null if no patient is linked. */
+  patientName: string | null;
+
   /** Called when the user selects "Open Result". */
   onOpen: (jobId: string) => void;
 
@@ -57,6 +63,15 @@ interface JobRowActionsProps {
 
   /** Called when the user confirms deletion. */
   onDelete: (jobId: string) => void;
+
+  /** Called when the user selects "Link to Patient" (no patient linked). */
+  onLinkPatient: (jobId: string) => void;
+
+  /** Called when the user selects "Change Patient" (patient already linked). */
+  onChangePatient: (jobId: string) => void;
+
+  /** Called when the user confirms "Unlink Patient" (patient already linked). */
+  onUnlinkPatient: (jobId: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -73,13 +88,20 @@ interface JobRowActionsProps {
 export function JobRowActions({
   jobId,
   isRerunPending,
+  patientId,
+  patientName,
   onOpen,
   onRerun,
   onDelete,
+  onLinkPatient,
+  onChangePatient,
+  onUnlinkPatient,
 }: JobRowActionsProps) {
   // Controls the delete confirmation dialog independently of the dropdown so
   // the dialog stays open even after the dropdown closes.
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  // Controls the unlink confirmation dialog independently of the dropdown.
+  const [unlinkDialogOpen, setUnlinkDialogOpen] = useState(false);
   const { t } = useTranslation();
 
   return (
@@ -121,6 +143,37 @@ export function JobRowActions({
 
           <DropdownMenuSeparator />
 
+          {/* Patient link/change/unlink */}
+          {!patientId ? (
+            <DropdownMenuItem
+              onSelect={() => onLinkPatient(jobId)}
+            >
+              <Link2 className="mr-2 h-4 w-4" />
+              {t("jobRow.linkPatient")}
+            </DropdownMenuItem>
+          ) : (
+            <>
+              <DropdownMenuItem
+                onSelect={() => onChangePatient(jobId)}
+              >
+                <Link2 className="mr-2 h-4 w-4" />
+                {t("jobRow.changePatient")}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="text-destructive focus:text-destructive"
+                onSelect={(e) => {
+                  e.preventDefault();
+                  setUnlinkDialogOpen(true);
+                }}
+              >
+                <Link2Off className="mr-2 h-4 w-4" />
+                {t("jobRow.unlinkPatient")}
+              </DropdownMenuItem>
+            </>
+          )}
+
+          <DropdownMenuSeparator />
+
           {/* Delete — opens confirmation dialog; does not delete immediately */}
           <DropdownMenuItem
             className="text-destructive focus:text-destructive"
@@ -157,6 +210,32 @@ export function JobRowActions({
               }}
             >
               {t("jobRow.delete")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* Unlink confirmation dialog                                          */}
+      {/* ------------------------------------------------------------------ */}
+      <AlertDialog open={unlinkDialogOpen} onOpenChange={setUnlinkDialogOpen}>
+        <AlertDialogContent onClick={(e) => e.stopPropagation()}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("patient.link.unlinkConfirmTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t("patient.link.unlinkConfirmDesc", { name: patientName ?? "" })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                setUnlinkDialogOpen(false);
+                onUnlinkPatient(jobId);
+              }}
+            >
+              {t("patient.link.unlink")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

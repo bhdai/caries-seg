@@ -19,6 +19,7 @@
  */
 import { createJob } from "@/api/jobs";
 import type { ModelArch, PipelineType } from "@/api/types";
+import { PatientCombobox } from "@/components/patients/PatientCombobox";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -57,6 +58,8 @@ export default function ConfigPage() {
   const [arch, setArch] = useState<ModelArch>("unet");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
+  const [selectedPatientName, setSelectedPatientName] = useState<string | null>(null);
 
   // Guard: redirect to upload page if there are no files.
   useEffect(() => {
@@ -74,7 +77,7 @@ export default function ConfigPage() {
     setError(null);
     setSubmitting(true);
     try {
-      const job = await createJob(files, pipeline, arch);
+      const job = await createJob(files, pipeline, arch, selectedPatientId ?? undefined);
       setLastJobId(job.id);
       navigate(`/result/${job.id}`);
     } catch (err) {
@@ -92,6 +95,29 @@ export default function ConfigPage() {
           {t("config.subtitle", { count: files.length })}
         </p>
       </div>
+
+      {/* Patient selection — optional, links this job to a patient record */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">{t("config.patientTitle")}</CardTitle>
+          <CardDescription>{t("config.patientDescription")}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <PatientCombobox
+            value={selectedPatientId}
+            valueName={selectedPatientName}
+            onChange={(id, name) => {
+              setSelectedPatientId(id);
+              setSelectedPatientName(name);
+            }}
+          />
+          {!selectedPatientId && (
+            <p className="text-xs text-muted-foreground">
+              {t("config.patientHint")}
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Pipeline selection */}
       <Card>

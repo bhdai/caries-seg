@@ -19,6 +19,7 @@
 import { fileUrl } from "@/api/files";
 import type { BBoxResponse } from "@/api/types";
 import * as BBoxLayer from "@/components/BBoxLayer";
+import { cn } from "@/lib/utils";
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 
 // =============================================================================
@@ -40,8 +41,12 @@ export interface OverlayCanvasHandle {
 }
 
 export interface OverlayCanvasProps {
-  /** ID of the ImageResult record (used to build API URLs). */
-  imageResultId: string;
+  /** ID of the ImageResult record (used to build default API URLs). */
+  imageResultId?: string;
+  /** Optional explicit original-image URL for unauthenticated/public pages. */
+  originalUrl?: string;
+  /** Optional explicit mask-image URL for unauthenticated/public pages. */
+  maskUrl?: string;
   /** Mask overlay opacity, 0–100. */
   opacity: number;
   /** Bounding boxes to draw (two-stage only; pass null/undefined otherwise). */
@@ -50,6 +55,8 @@ export interface OverlayCanvasProps {
   showBoundingBoxes?: boolean;
   /** Natural dimensions of the original image (used for aspect-ratio CSS). */
   originalSize: { width: number; height: number };
+  /** Optional canvas class override for layout-specific contexts. */
+  className?: string;
 }
 
 /**
@@ -83,10 +90,13 @@ export const OverlayCanvas = forwardRef<OverlayCanvasHandle, OverlayCanvasProps>
   function OverlayCanvas(
     {
       imageResultId,
+      originalUrl,
+      maskUrl,
       opacity,
       boundingBoxes,
       showBoundingBoxes = true,
       originalSize,
+      className,
     }: OverlayCanvasProps,
     ref,
   ) {
@@ -96,7 +106,7 @@ export const OverlayCanvas = forwardRef<OverlayCanvasHandle, OverlayCanvasProps>
   // opacity changes don't trigger additional network requests.
   const originalImgRef = useRef<HTMLImageElement | null>(null);
   const maskImgRef = useRef<HTMLImageElement | null>(null);
-  const loadedForIdRef = useRef<string | null>(null);
+  const loadedForKeyRef = useRef<string | null>(null);
 
   // Expose the export handle.  The returned Blob captures the canvas at
   // its current rendered state (opacity, bounding boxes, visible now).
@@ -126,17 +136,23 @@ export const OverlayCanvas = forwardRef<OverlayCanvasHandle, OverlayCanvasProps>
       const canvas = canvasRef.current;
       if (!canvas) return;
 
-      // (Re-)load images if this is the first render for this imageResultId.
-      if (loadedForIdRef.current !== imageResultId) {
+      const resolvedOriginalUrl = originalUrl ?? (imageResultId ? fileUrl(imageResultId, "original") : null);
+      const resolvedMaskUrl = maskUrl ?? (imageResultId ? fileUrl(imageResultId, "mask") : null);
+      if (!resolvedOriginalUrl || !resolvedMaskUrl) return;
+
+      const imageKey = `${resolvedOriginalUrl}|${resolvedMaskUrl}`;
+
+      // (Re-)load images when the source URLs change.
+      if (loadedForKeyRef.current !== imageKey) {
         try {
           const [orig, mask] = await Promise.all([
-            loadImage(fileUrl(imageResultId, "original")),
-            loadImage(fileUrl(imageResultId, "mask")),
+            loadImage(resolvedOriginalUrl),
+            loadImage(resolvedMaskUrl),
           ]);
           if (cancelled) return;
           originalImgRef.current = orig;
           maskImgRef.current = mask;
-          loadedForIdRef.current = imageResultId;
+          loadedForKeyRef.current = imageKey;
         } catch {
           // If either image fails to load, leave the canvas blank.
           return;
@@ -201,7 +217,16 @@ export const OverlayCanvas = forwardRef<OverlayCanvasHandle, OverlayCanvasProps>
     return () => {
       cancelled = true;
     };
-  }, [imageResultId, opacity, boundingBoxes, originalSize.height, originalSize.width, showBoundingBoxes]);
+  }, [
+    imageResultId,
+    originalUrl,
+    maskUrl,
+    opacity,
+    boundingBoxes,
+    originalSize.height,
+    originalSize.width,
+    showBoundingBoxes,
+  ]);
 
   // Calculate a CSS aspect-ratio so the canvas doesn't collapse before load.
   const aspectRatio =
@@ -212,7 +237,7 @@ export const OverlayCanvas = forwardRef<OverlayCanvasHandle, OverlayCanvasProps>
   return (
     <canvas
       ref={canvasRef}
-      className="w-full rounded-md border"
+      className={cn("w-full rounded-md border", className)}
       style={{ aspectRatio }}
     />
   );

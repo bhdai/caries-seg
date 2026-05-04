@@ -45,6 +45,7 @@ import { JobRowActions } from "@/components/history/JobRowActions";
 import { EmptyJobsState } from "@/components/history/EmptyJobsState";
 import { formatRelativeTime, formatAbsoluteTime } from "@/lib/time";
 import type { JobSummary } from "@/api/types";
+import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 
@@ -96,6 +97,15 @@ export interface JobsTableProps {
   /** Called when the user confirms deletion of a single row. */
   onDeleteOne: (jobId: string) => void;
 
+  /** Called when the user selects "Link to Patient" or "Change Patient". */
+  onLinkPatient: (jobId: string) => void;
+
+  /**
+   * Called when the user confirms "Unlink Patient" for a row.
+   * The caller is responsible for firing the patchJob mutation.
+   */
+  onUnlinkPatient: (jobId: string) => void;
+
   /** Called when the user toggles the row checkbox. */
   onToggleSelect: (jobId: string) => void;
 
@@ -119,6 +129,8 @@ function buildColumns(
   onDeleteOne: (id: string) => void,
   onToggleSelect: (id: string) => void,
   onSelectAll: (allIds: string[]) => void,
+  onLinkPatient: (id: string) => void,
+  onUnlinkPatient: (id: string) => void,
   t: TFunction,
 ) {
   const allVisible = rows.map((r) => r.id);
@@ -177,7 +189,27 @@ function buildColumns(
         );
       },
     }),
-
+    // Patient link — name or dash
+    col.display({
+      id: "patient",
+      header: t("jobsTable.colPatient"),
+      cell: ({ row }) => {
+        const job = row.original;
+        if (job.patient_id && job.patient_name) {
+          return (
+            <Link
+              to={`/patients/${job.patient_id}`}
+              className="text-sm hover:underline underline-offset-4 font-medium"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {job.patient_name}
+            </Link>
+          );
+        }
+        return <span className="text-sm text-muted-foreground">—</span>;
+      },
+      size: 140,
+    }),
     // Pipeline + model arch in a compact two-line cell
     col.display({
       id: "pipeline_model",
@@ -229,9 +261,14 @@ function buildColumns(
         <JobRowActions
           jobId={row.original.id}
           isRerunPending={rerunPendingJobId === row.original.id}
+          patientId={row.original.patient_id}
+          patientName={row.original.patient_name}
           onOpen={onOpenJob}
           onRerun={onRerun}
           onDelete={onDeleteOne}
+          onLinkPatient={onLinkPatient}
+          onChangePatient={onLinkPatient}
+          onUnlinkPatient={onUnlinkPatient}
         />
       ),
       size: 48,
@@ -285,6 +322,8 @@ export function JobsTable({
   onOpenJob,
   onRerun,
   onDeleteOne,
+  onLinkPatient,
+  onUnlinkPatient,
   onToggleSelect,
   onSelectAll,
 }: JobsTableProps) {
@@ -299,6 +338,8 @@ export function JobsTable({
     onDeleteOne,
     onToggleSelect,
     onSelectAll,
+    onLinkPatient,
+    onUnlinkPatient,
     t,
   );
 

@@ -15,11 +15,16 @@ import type { JobDetail, JobFilters, JobsPage } from "@/api/types";
 /**
  * Submit a new inference job with the uploaded files and selected pipeline /
  * model configuration.
+ *
+ * @param patientId - Optional patient to link the job to on creation.
+ *   When non-null the ID is appended to the FormData so the backend can
+ *   set the foreign-key relationship immediately.
  */
 export async function createJob(
   files: File[],
   pipelineType: "single_stage" | "two_stage",
   modelArch: "unet" | "double_unet",
+  patientId?: string | null,
 ): Promise<JobDetail> {
   const form = new FormData();
   for (const file of files) {
@@ -27,6 +32,12 @@ export async function createJob(
   }
   form.append("pipeline_type", pipelineType);
   form.append("model_arch", modelArch);
+
+  // Only include patient_id when a patient has been explicitly selected.
+  // Omitting the field is equivalent to null on the backend.
+  if (patientId != null) {
+    form.append("patient_id", patientId);
+  }
 
   const res = await apiFetch("/api/jobs", { method: "POST", body: form });
   return res.json() as Promise<JobDetail>;
@@ -67,9 +78,32 @@ export async function listJobs(filters: JobFilters): Promise<JobsPage> {
   if (filters.pipelineType !== "all") params.pipeline_type = filters.pipelineType;
   if (filters.modelArch !== "all") params.model_arch = filters.modelArch;
   if (filters.search) params.search = filters.search;
+  if (filters.patientId) params.patient_id = filters.patientId;
 
   const res = await apiFetch(`/api/jobs${buildQueryString(params)}`);
   return res.json() as Promise<JobsPage>;
+}
+
+// ---------------------------------------------------------------------------
+// Patch
+// ---------------------------------------------------------------------------
+
+/**
+ * Partially update a job (PATCH semantics).  Currently used only for
+ * retroactive patient linking and unlinking from the History and Result pages.
+ *
+ * Passing `{ patient_id: null }` removes an existing patient association.
+ */
+export async function patchJob(
+  jobId: string,
+  patch: { patient_id: string | null },
+): Promise<JobDetail> {
+  const res = await apiFetch(`/api/jobs/${jobId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+  return res.json() as Promise<JobDetail>;
 }
 
 // ---------------------------------------------------------------------------

@@ -85,6 +85,18 @@ class Job(Base):
         nullable=True,
         index=True,
     )
+
+    # Optional link to the patient whose radiograph this job processes.
+    # SET NULL on delete so that soft-deleting a patient does not affect job
+    # records — the historical FK is retained for audit even after the patient
+    # is archived.
+    patient_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("patients.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -116,3 +128,32 @@ class Job(Base):
         foreign_keys=[owner_id],
         lazy="select",
     )
+
+    # Many jobs → one patient (nullable).
+    # lazy="joined" so the patient name is available without an extra round-trip
+    # when the list_jobs service maps each job to a JobSummaryResponse.
+    patient: Mapped["Patient | None"] = relationship(  # noqa: F821
+        "Patient",
+        back_populates="jobs",
+        foreign_keys=[patient_id],
+        lazy="joined",
+    )
+
+    # One job → many share links.  Cascade-delete share links when the job is
+    # deleted so revoked-job tokens immediately stop resolving.
+    share_links: Mapped[list["ShareLink"]] = relationship(  # noqa: F821
+        "ShareLink",
+        back_populates="job",
+        cascade="all, delete-orphan",
+        lazy="select",
+    )
+
+    @property
+    def patient_name(self) -> str | None:
+        """Return the linked patient's full name, or None if no patient is linked.
+
+        Used by ``JobResponse.model_validate(job)`` (Pydantic ``from_attributes``
+        mode reads Python properties via ``getattr``).  Since ``patient`` is
+        loaded with ``lazy="joined"`` no extra DB round-trip is needed.
+        """
+        return self.patient.full_name if self.patient is not None else None

@@ -35,6 +35,7 @@ from app.core.database import get_session_factory
 from app.core.storage import StorageError, save_display_copy, save_upload
 from app.models.image_result import ImageResult
 from app.models.job import Job, JobStatus
+from app.models.patient import Patient
 from app.models.user import User
 from app.schemas.job import JobResponse
 from app.schemas.job_history import JobListQuery, JobSummaryResponse, JobsPageResponse
@@ -108,6 +109,10 @@ async def list_jobs(query: JobListQuery, db: AsyncSession, user: User) -> JobsPa
     if query.model_arch != "all":
         filters.append(Job.model_arch == query.model_arch)
 
+    # Filter to a specific patient's jobs when the caller provides patient_id.
+    if query.patient_id is not None:
+        filters.append(Job.patient_id == query.patient_id)
+
     if query.search:
         # Match against the string form of the job UUID and against every
         # filename stored under that job.  The filename branch is expressed as
@@ -133,10 +138,19 @@ async def list_jobs(query: JobListQuery, db: AsyncSession, user: User) -> JobsPa
             .where(ImageResult.original_filename.ilike(search_term, escape=_ILIKE_ESCAPE))
             .scalar_subquery()
         )
+        # Also match against the linked patient's full name via a subquery
+        # so searches like "nguyen" surface all of that patient's jobs.
+        patient_name_job_ids = (
+            select(Job.id)
+            .join(Patient, Job.patient_id == Patient.id)
+            .where(Patient.full_name.ilike(search_term, escape=_ILIKE_ESCAPE))
+            .scalar_subquery()
+        )
         filters.append(
             or_(
                 cast(Job.id, String).ilike(search_term, escape=_ILIKE_ESCAPE),
                 Job.id.in_(filename_job_ids),
+                Job.id.in_(patient_name_job_ids),
             )
         )
 
@@ -202,6 +216,10 @@ def _job_to_summary(job: Job) -> JobSummaryResponse:
 
     The filename_preview is capped at three entries to keep list payloads
     bounded regardless of how many images a job contains.
+
+    ``patient_name`` is read from ``job.patient.full_name``; because the
+    ``patient`` relationship is configured with ``lazy="joined"``, no extra
+    DB round-trip is needed when mapping a page of jobs.
     """
     filenames = [ir.original_filename for ir in job.image_results]
     return JobSummaryResponse(
@@ -215,6 +233,8 @@ def _job_to_summary(job: Job) -> JobSummaryResponse:
         primary_filename=filenames[0] if filenames else "",
         filename_preview=filenames[:3],
         error_message=job.error_message,
+        patient_id=job.patient_id,
+        patient_name=job.patient_name,
     )
 
 

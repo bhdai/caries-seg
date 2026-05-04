@@ -54,6 +54,10 @@ export interface JobDetail {
   created_at: string;
   updated_at: string;
   image_results: ImageResultResponse[];
+  /** UUID of the linked patient, or null when the job is not linked. */
+  patient_id: string | null;
+  /** Display name of the linked patient, or null when unlinked. */
+  patient_name: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -75,6 +79,16 @@ export interface JobSummary {
   primary_filename: string;
   filename_preview: string[];
   error_message: string | null;
+  /** UUID of the linked patient, or null when the job is not linked. */
+  patient_id: string | null;
+  /** Display name of the linked patient, or null when unlinked. */
+  patient_name: string | null;
+  /**
+   * True when the job has at least one active share link.
+   * Used by PatientScanHistory to display a share indicator icon per row.
+   * Optional because older API responses may omit this field.
+   */
+  has_share_link?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -112,6 +126,8 @@ export interface JobFilters {
   modelArch: "all" | ModelArch;
   search: string;
   sort: "newest" | "oldest" | "last_activity_desc";
+  /** When set, filters jobs to this patient UUID only. */
+  patientId: string | null;
 }
 
 // ---------------------------------------------------------------------------

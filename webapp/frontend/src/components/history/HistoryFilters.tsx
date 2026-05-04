@@ -28,6 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { PatientCombobox } from "@/components/patients/PatientCombobox";
 import { DEFAULT_JOB_FILTERS } from "@/lib/jobFilters";
 import type { JobFilters } from "@/api/types";
 import { Search, X } from "lucide-react";
@@ -144,6 +145,13 @@ export function HistoryFilters({ filters, onChange }: HistoryFiltersProps) {
   // Non-search filter helpers — each one resets page to 1.
   // ---------------------------------------------------------------------------
 
+  const handlePatientChange = useCallback(
+    (id: string | null) => {
+      onChange({ ...filters, patientId: id, page: 1 });
+    },
+    [filters, onChange],
+  );
+
   const handleStatusChange = useCallback(
     (value: string) => {
       onChange({
@@ -200,7 +208,8 @@ export function HistoryFilters({ filters, onChange }: HistoryFiltersProps) {
     filters.status !== DEFAULT_JOB_FILTERS.status ||
     filters.pipelineType !== DEFAULT_JOB_FILTERS.pipelineType ||
     filters.modelArch !== DEFAULT_JOB_FILTERS.modelArch ||
-    filters.sort !== DEFAULT_JOB_FILTERS.sort;
+    filters.sort !== DEFAULT_JOB_FILTERS.sort ||
+    filters.patientId !== DEFAULT_JOB_FILTERS.patientId;
 
   const handleReset = useCallback(() => {
     setLocalSearch("");
@@ -230,6 +239,14 @@ export function HistoryFilters({ filters, onChange }: HistoryFiltersProps) {
           aria-label="Search jobs"
         />
       </div>
+
+      {/* Patient filter combobox */}
+      <PatientCombobox
+        value={filters.patientId ?? null}
+        onChange={(id) => handlePatientChange(id)}
+        placeholder={t("historyFilters.allPatients")}
+        className="w-52"
+      />
 
       {/* Status selector */}
       <Select value={filters.status} onValueChange={handleStatusChange}>

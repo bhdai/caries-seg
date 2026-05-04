@@ -7,7 +7,10 @@ import { AdminUsersPage } from "@/pages/AdminUsersPage";
 import ConfigPage from "@/pages/ConfigPage";
 import DashboardPage from "@/pages/DashboardPage";
 import HistoryPage from "@/pages/HistoryPage";
+import PatientsPage from "@/pages/PatientsPage";
+import PatientDetailPage from "@/pages/PatientDetailPage";
 import ResultPage from "@/pages/ResultPage";
+import SharedResultPage from "@/pages/SharedResultPage";
 import UploadPage from "@/pages/UploadPage";
 import { LoginPage } from "@/pages/LoginPage";
 import { ChangePasswordPage } from "@/pages/ChangePasswordPage";
@@ -45,6 +48,9 @@ export default function App() {
             {/* Public route — no auth required, no nav bar */}
             <Route path="/login" element={<LoginPage />} />
 
+            {/* Public shared result page — accessed by patients via share link */}
+            <Route path="/shared/:token" element={<SharedResultPage />} />
+
             {/* Popup callback for Google account linking — public, no AppShell */}
             <Route path="/auth/google/link-callback" element={<GoogleLinkCallbackPage />} />
 
@@ -73,6 +79,8 @@ export default function App() {
               <Route path="/config" element={<ConfigPage />} />
               <Route path="/result/:jobId" element={<ResultPage />} />
               <Route path="/history" element={<HistoryPage />} />
+              <Route path="/patients" element={<PatientsPage />} />
+              <Route path="/patients/:patientId" element={<PatientDetailPage />} />
               <Route path="/admin/users" element={<AdminUsersPage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
