@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -43,3 +44,40 @@ class ShareLinkResponse(BaseModel):
     created_by_username: str | None
 
     model_config = {"from_attributes": True}
+
+
+# ---------------------------------------------------------------------------
+# Public result schemas (no auth required)
+# ---------------------------------------------------------------------------
+
+
+class SharedImageResult(BaseModel):
+    """Compact image representation returned in a shared result view.
+
+    Only fields safe for unauthenticated consumption are exposed.  Storage
+    paths (``upload_path``, ``display_path``, ``mask_path``) are intentionally
+    omitted — the public file-serving endpoints handle actual byte delivery.
+    """
+
+    id: uuid.UUID
+    original_filename: str
+    # Dimensions stored as {"width": int, "height": int}.
+    original_size: dict[str, Any]
+    # YOLO bounding boxes (null for single-stage jobs or not-yet-inferred).
+    bounding_boxes: list[Any] | None
+    # True when the mask artifact exists and the result can be rendered.
+    is_ready: bool
+
+
+class SharedResultResponse(BaseModel):
+    """Public result payload returned by ``GET /api/shared/{token}``.
+
+    Aggregates the patient name, scan timestamp, and all image results for
+    a job so the shared result page can render everything in a single fetch.
+    ``patient_name`` may be None if the job was never linked to a patient.
+    """
+
+    patient_name: str | None
+    # Job creation time used as the "scan date" shown to the patient.
+    scan_date: datetime
+    images: list[SharedImageResult]
