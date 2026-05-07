@@ -7,6 +7,7 @@
  */
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { describe, it, expect, vi } from "vitest";
 
@@ -34,14 +35,23 @@ function StoreSeeder({ children }: { children: ReactNode }) {
 }
 
 function renderConfigPage() {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+
   return render(
-    <UploadStoreProvider>
-      <MemoryRouter>
-        <StoreSeeder>
-          <ConfigPage />
-        </StoreSeeder>
-      </MemoryRouter>
-    </UploadStoreProvider>,
+    <QueryClientProvider client={queryClient}>
+      <UploadStoreProvider>
+        <MemoryRouter>
+          <StoreSeeder>
+            <ConfigPage />
+          </StoreSeeder>
+        </MemoryRouter>
+      </UploadStoreProvider>
+    </QueryClientProvider>,
   );
 }
 

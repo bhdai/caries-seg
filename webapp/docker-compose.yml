@@ -33,6 +33,7 @@ services:
     build:
       context: ..
       dockerfile: webapp/backend/Dockerfile
+      # network: host
     env_file: .env
     environment:
       # DATABASE_URL overrides whatever is in .env so the backend always
@@ -79,6 +80,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      # network: host
     environment:
       # Inside the Compose network the backend is reachable by its service
       # name, not by localhost (which resolves to the frontend container itself).

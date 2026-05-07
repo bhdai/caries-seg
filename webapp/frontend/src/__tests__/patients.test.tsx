@@ -102,8 +102,8 @@ describe("PatientCombobox — search", () => {
       <PatientCombobox value={null} onChange={handleChange} />,
     );
 
-    // Open the popover by clicking the trigger button.
-    const trigger = screen.getByRole("button");
+    // Open the popover by clicking the trigger combobox.
+    const trigger = screen.getByRole("combobox", { name: /search patient/i });
     await user.click(trigger);
 
     // Type a search query — the debounce hook will fire with the query.
@@ -133,7 +133,7 @@ describe("PatientCombobox — create flow", () => {
       <PatientCombobox value={null} onChange={vi.fn()} />,
     );
 
-    await user.click(screen.getByRole("button"));
+    await user.click(screen.getByRole("combobox", { name: /search patient/i }));
 
     const input = screen.getByPlaceholderText(/name or phone/i);
     await user.type(input, "Unknown");
@@ -217,7 +217,7 @@ describe("PatientLinkModal — link patient", () => {
     );
 
     // Open the combobox inside the dialog and search.
-    const comboboxTrigger = screen.getByRole("button", { name: /search patient/i });
+    const comboboxTrigger = screen.getByRole("combobox", { name: /search patient/i });
     await user.click(comboboxTrigger);
 
     const searchInput = screen.getByPlaceholderText(/name or phone/i);

@@ -130,6 +130,7 @@ export function PatientCombobox({
           <Button
             variant="outline"
             role="combobox"
+            aria-label={resolvedPlaceholder}
             aria-expanded={open}
             disabled={disabled}
             className={cn(
